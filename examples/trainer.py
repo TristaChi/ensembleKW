@@ -121,7 +121,7 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose,
 
         print(epoch, i, robust_ce.item(), robust_err, ce.item(), err.item(),
            file=log)
-        if verbose: 
+        if verbose and (i % verbose == 0 or real_time): 
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
             endline = '\n' if i % verbose == 0 else '\r'
             print('Test: [{0}/{1}]\t'

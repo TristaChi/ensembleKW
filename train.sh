@@ -26,10 +26,10 @@ python examples/mnist.py \
     --starting_epsilon 0.01 \
     --schedule_length 20 \
     --proj 50 \
-    --prefix /longterm/chi/KwModels/MNIST/small1/2 \
-    --verbose 200 \
+    --prefix /longterm/chi/KwModels/MNIST/small1/4 \
+    --verbose 100 \
     --norm_train l1_median \
     --norm_test l1 \
-    --cuda_ids 1 \
-    > /longterm/chi/KwModels/MNIST/small1/2.log 2>&1 &
+    --cuda_ids 2 \
+    > /longterm/chi/KwModels/MNIST/small1/4.log 2>&1 &
 
