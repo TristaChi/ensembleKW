@@ -214,7 +214,7 @@ def cifar_loaders(batch_size, shuffle_test=False):
             normalize,
         ]))
     test = datasets.CIFAR10('./data', train=False, 
-        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+        transform=transforms.Compose([transforms.ToTensor(), normalize]), download=True)
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size,
         shuffle=True, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size,
@@ -357,6 +357,7 @@ def argparser(batch_size=50, epochs=20, seed=0, verbose=1, lr=1e-3,
     parser.add_argument('--seed', type=int, default=seed)
     parser.add_argument('--verbose', type=int, default=verbose)
     parser.add_argument('--cuda_ids', default=None)
+    parser.add_argument('--print_log', type=bool, default=True)
 
     
     args = parser.parse_args()

@@ -14,7 +14,7 @@ from attacks import _pgd
 DEBUG = False
 
 def train_robust(loader, model, opt, epsilon, epoch, log, verbose, 
-                real_time=False, clip_grad=None, **kwargs):
+                real_time=False, clip_grad=None, print_log=True, **kwargs):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -59,8 +59,9 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
         batch_time.update(time.time()-end)
         end = time.time()
 
-        print(epoch, i, robust_ce.detach().item(), 
-                robust_err, ce.item(), err.item(), file=log)
+        if print_log:
+            print(epoch, i, robust_ce.detach().item(), 
+                    robust_err, ce.item(), err.item(), file=log)
 
         if verbose and (i % verbose == 0 or real_time): 
             endline = '\n' if i % verbose == 0 else '\r'
@@ -84,7 +85,7 @@ def train_robust(loader, model, opt, epsilon, epoch, log, verbose,
 
 
 def evaluate_robust(loader, model, epsilon, epoch, log, verbose, 
-                    real_time=False, parallel=False, **kwargs):
+                    real_time=False, parallel=False, print_log=True, **kwargs):
     batch_time = AverageMeter()
     losses = AverageMeter()
     errors = AverageMeter()
@@ -119,8 +120,9 @@ def evaluate_robust(loader, model, epsilon, epoch, log, verbose,
         batch_time.update(time.time()-end)
         end = time.time()
 
-        print(epoch, i, robust_ce.item(), robust_err, ce.item(), err.item(),
-           file=log)
+        if print_log:
+            print(epoch, i, robust_ce.item(), robust_err, ce.item(), err.item(),
+            file=log)
         if verbose and (i % verbose == 0 or real_time): 
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
             endline = '\n' if i % verbose == 0 else '\r'
@@ -491,8 +493,8 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
 
         print(epoch, i, robust_ce.item(), robust_err, ce.item(), err,
            file=log)
-        if verbose: 
-            endline = '\n' if  i % verbose == 0 else '\r'
+        if verbose and i % verbose == 0: 
+            # endline = '\n' if  i % verbose == 0 else '\r'
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
