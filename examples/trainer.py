@@ -494,7 +494,7 @@ def evaluate_robust_cascade(loader, models, epsilon, epoch, log, verbose, **kwar
         print(epoch, i, robust_ce.item(), robust_err, ce.item(), err,
            file=log)
         if verbose and i % verbose == 0: 
-            # endline = '\n' if  i % verbose == 0 else '\r'
+            endline = '\n' if  i % verbose == 0 else '\r'
             # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
