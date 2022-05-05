@@ -1,6 +1,6 @@
 ################################################## MNIST l1 ##################################################
-# file=/longterm/chi/KwModels/MNIST
-file=./models/MNIST
+file=/longterm/chi/KwModels/MNIST
+# file=./models/MNIST
 
 ####### mnist small exact 1 #######
 # ??? proj defult value
@@ -19,22 +19,22 @@ file=./models/MNIST
 # > ${file}/smallExact1/${name}.out
 
 ####### mnist small1, small3 #######
-# name=cas
-# eps=3
-# python examples/mnist.py \
-#     --epochs 60 \
-#     --epsilon 0.${eps} \
-#     --starting_epsilon 0.01 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/small${eps}/${name} \
-#     --verbose 100 \
-#     --norm_train l1_median \
-#     --norm_test l1 \
-#     --cascade 6 \
-#     --cuda_ids 2 \
-#     --print_log False \
-# > ${file}/small${eps}/${name}.out
+name=cas
+eps=3
+python examples/mnist.py \
+    --epochs 60 \
+    --epsilon 0.${eps} \
+    --starting_epsilon 0.01 \
+    --schedule_length 20 \
+    --proj 50 \
+    --prefix ${file}/small${eps}/${name} \
+    --verbose 100 \
+    --norm_train l1_median \
+    --norm_test l1 \
+    --cascade 6 \
+    --cuda_ids 2 \
+    --print_log False \
+> ${file}/small${eps}/${name}.out
 
 
 ####### mnist large1 #######
@@ -103,26 +103,26 @@ file=./models/MNIST
 
 
 ################################################## CIFAR l1 ##################################################
-# file=/longterm/chi/KwModels/CIFAR
-file=./models/CIFAR
+file=/longterm/chi/KwModels/CIFAR
+# file=./models/CIFAR
 
-####### cifar small2,small8 #######
-name=cas
-python examples/cifar.py \
-    --epochs 60 \
-    --epsilon 0.0348 \
-    --starting_epsilon 0.001 \
-    --schedule_length 20 \
-    --proj 50 \
-    --prefix ${file}/small2/${name} \
-    --verbose 200 \
-    --norm_train l1_median \
-    --norm_test l1 \
-    --cascade 6 \
-    --test_batch_size 25 \
-    --cuda_ids 1 \
-    --print_log False \
-> ${file}/small2/${name}.out 
+####### cifar small2 #######
+# name=cas
+# python examples/cifar.py \
+#     --epochs 60 \
+#     --epsilon 0.0348 \
+#     --starting_epsilon 0.001 \
+#     --schedule_length 20 \
+#     --proj 50 \
+#     --prefix ${file}/small2/${name} \
+#     --verbose 200 \
+#     --norm_train l1_median \
+#     --norm_test l1 \
+#     --cascade 6 \
+#     --test_batch_size 25 \
+#     --cuda_ids 2 \
+#     --print_log False \
+# > ${file}/small2/${name}.out 
 
 
 ####### cifar large2 #######
