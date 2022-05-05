@@ -93,10 +93,10 @@ if __name__ == "__main__":
     
 
     if args.dataset == "mnist":
-        _, test_loader = pblm.mnist_loaders(1)
+        train_loader, test_loader = pblm.mnist_loaders(1)
         select_model = select_mnist_model
     elif args.dataset == "cifar":
-        _, test_loader = pblm.cifar_loaders(1)
+        train_loader, test_loader = pblm.cifar_loaders(1)
         select_model = select_cifar_model
 
 
@@ -109,22 +109,20 @@ if __name__ == "__main__":
         m.load_state_dict(sd)
         models.append(m)
         print("number of models: ",len(models))
-
-    # robust cascade training
-    # err = evaluate_robust_cascade(test_loader, model,
-    #    args.epsilon, 0, test_log, args.verbose,
-    #    norm_type=args.norm, bounded_input=False, proj=args.proj)    
     
     for model in models:
         model.eval()
 
     for j,model in enumerate(models):
         # if j == 0: continue
+        train_log = open(args.output+str(j)+"train", "w")
+        test_log = open(args.output+str(j)+"test", "w")
 
-        test_log = open(args.output+str(j), "w")
-
+        err = evaluate_robustness(train_loader, model,
+            args.epsilon, 0, train_log, args.verbose,
+            norm_type=args.norm, bounded_input=False, proj=args.proj)
         err = evaluate_robustness(test_loader, model,
-        args.epsilon, 0, test_log, args.verbose,
-        norm_type=args.norm, bounded_input=False, proj=args.proj)
+            args.epsilon, 0, test_log, args.verbose,
+            norm_type=args.norm, bounded_input=False, proj=args.proj)
 
     
