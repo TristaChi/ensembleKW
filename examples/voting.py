@@ -66,7 +66,7 @@ if __name__ == "__main__":
     y_true_all = []
     certified_all =[]
 
-    for i in range(5):
+    for i in range(3):
         y_pred, y_true,certified = readFile(count=i)
         y_pred_all.append(y_pred)
         y_true_all.append(y_true)

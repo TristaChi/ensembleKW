@@ -61,9 +61,6 @@ def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
     acc = AverageMeter()
     vra = AverageMeter()
     
-
-    # torch.set_grad_enabled(False)
-    # end = time.time()
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
@@ -78,21 +75,7 @@ def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
         
         if verbose and i % verbose == 0: 
             print(i, y_pred.item(), y.item(), certified)
-        #     endline = '\n' if  i % verbose == 0 else '\r'
-        #     # print(epoch, i, robust_ce.data[0], robust_err, ce.data[0], err)
-        #     print('Test: [{0}/{1}]\t'
-        #           'y_pred {y_pred:.3f} \t'
-        #           'certified {certified:.3f} \t'
-        #           'y_true {y_true:.4f} '.format(
-        #               i, len(loader), y_pred=y_pred, 
-        #               certified=certified, y_true=y, end=endline))
-        # log.flush()
 
-    # torch.cuda.empty_cache()
-    # print('')
-    # print(' * acc {acc.avg:.3f}\t'
-    #       'vra {vra.avg:.3f}'
-    #       .format(acc=acc, vra=vra))
     torch.set_grad_enabled(True)
     return vra.avg
 
@@ -125,12 +108,13 @@ if __name__ == "__main__":
         m = select_model(args.model)
         m.load_state_dict(sd)
         models.append(m)
+        print("number of models: ",len(models))
 
     # robust cascade training
     # err = evaluate_robust_cascade(test_loader, model,
     #    args.epsilon, 0, test_log, args.verbose,
     #    norm_type=args.norm, bounded_input=False, proj=args.proj)    
-       
+    
     for model in models:
         model.eval()
 
