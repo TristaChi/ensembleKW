@@ -115,8 +115,8 @@ if __name__ == "__main__":
 
     for j,model in enumerate(models):
         # if j == 0: continue
-        train_log = open(args.output+str(j)+"train", "w")
-        test_log = open(args.output+str(j)+"test", "w")
+        train_log = open(args.output+str(j)+"_train", "w")
+        test_log = open(args.output+str(j)+"_test", "w")
 
         err = evaluate_robustness(train_loader, model,
             args.epsilon, 0, train_log, args.verbose,
