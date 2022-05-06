@@ -114,7 +114,7 @@ if __name__ == "__main__":
         model.eval()
 
     for j,model in enumerate(models):
-        # if j == 0: continue
+        # if j < 4: continue
         train_log = open(args.output+str(j)+"_train", "w")
         test_log = open(args.output+str(j)+"_test", "w")
 

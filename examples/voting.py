@@ -3,8 +3,8 @@ import argparse
 import csv
 
 
-def readFile(count=2,dir="/longterm/chi/KwModels/MNIST/small1/best"):
-    file=dir+str(count)
+def readFile(count=2,dir="evalData/l_inf/mnist_small_0_1/mnist_small_0_1",data="test"):
+    file=dir+"_"+str(count)+"_"+str(data)
     result = np.loadtxt(file)
     y_pred = result[:,1]
     y_true = result[:,2]
@@ -36,8 +36,8 @@ def robust_voting(y_pred, y_true,certified):
         if sum(count_vra<0)==len(count_vra): vra += 1
         if sum(count_acc<0)==len(count_acc): acc += 1
 
-    print("voting clean_acc: ", acc/np.shape(y_pred)[1])
-    print("voting vra: ", vra/np.shape(y_pred)[1])
+    print("voting clean_acc: ", acc/np.shape(y_pred)[1],", error: ",1-acc/np.shape(y_pred)[1])
+    print("voting vra: ", vra/np.shape(y_pred)[1],", error: ",1-vra/np.shape(y_pred)[1])
 
 def cascade(y_pred, y_true,certified):
     correct = 0
@@ -51,8 +51,8 @@ def cascade(y_pred, y_true,certified):
             elif y_pred[j][i] == y_true[j][i] and j==np.shape(y_pred)[0]-1:
                 correct = correct + 1
 
-    print("cascade clean_acc: ", correct/np.shape(y_pred)[1])
-    print("cascade vra: ", vra/np.shape(y_pred)[1])
+    print("cascade clean_acc: ", correct/np.shape(y_pred)[1],", error: ",1-correct/np.shape(y_pred)[1])
+    print("cascade vra: ", vra/np.shape(y_pred)[1],", error: ",1-vra/np.shape(y_pred)[1])
 
     
 
@@ -62,19 +62,21 @@ if __name__ == "__main__":
     # args = parser.parse_args()
 
     # readFile(args.filename)
+    model_type="cifar_small_0_2"
+    dir = "/home/chi/NNRobustness/ensembleKW/evalData/l_inf/"+model_type+"/test_"+model_type
+    count=3
     y_pred_all = []
     y_true_all = []
     certified_all =[]
-
-    for i in range(3):
-        y_pred, y_true,certified = readFile(count=i)
+    print("results for model type ", model_type)
+    for i in range(count):
+        y_pred, y_true,certified = readFile(count=i,dir=dir,data="test")
         y_pred_all.append(y_pred)
         y_true_all.append(y_true)
         certified_all.append(certified)
         
-    print(np.shape(certified_all))
-    print("model 0 clean accuracy: ", np.mean(y_pred_all[0]==y_true_all[0]))
-    print("model 0 vra: ", np.mean((y_pred_all[0]==y_true_all[0])*certified_all[0]))
+    print("model 0 clean accuracy: ", np.mean(y_pred_all[0]==y_true_all[0]),", error: ",1-np.mean(y_pred_all[0]==y_true_all[0]))
+    print("model 0 vra: ", np.mean((y_pred_all[0]==y_true_all[0])*certified_all[0]),", error: ",1-np.mean((y_pred_all[0]==y_true_all[0])*certified_all[0]))
 
     cascade(y_pred_all, y_true_all,certified_all)
     robust_voting(y_pred_all, y_true_all,certified_all)
