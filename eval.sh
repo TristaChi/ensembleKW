@@ -22,42 +22,42 @@
 
 
 # mnist large1, large3
-eps=3
-model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/mnist_large_0_${eps}.pth"
-output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/mnist_large_0_${eps}/mnist_large_0_${eps}_"
-
-python examples/evaluate.py \
-    --model large \
-    --epsilon 0.${eps} \
-    --proj 50 \
-    --norm l1 \
-    --dataset mnist \
-    --load ${model} \
-    --output ${output} \
-    --verbose 100 \
-    --cuda_ids 1 \
-> ${output}.log 
-
-############################################## CIFAR l1 ##################################################
-# cifar small2, small8
-# epspx=2
-# model_type=small
-# model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
-# output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_0_${epspx}_"
-# eps=0.0348
-# # eps=0.139
+# eps=3
+# model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/mnist_large_0_${eps}.pth"
+# output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/mnist_large_0_${eps}/mnist_large_0_${eps}_"
 
 # python examples/evaluate.py \
-#     --model ${model_type} \
-#     --epsilon  ${eps} \
+#     --model large \
+#     --epsilon 0.${eps} \
 #     --proj 50 \
 #     --norm l1 \
-#     --dataset cifar \
+#     --dataset mnist \
 #     --load ${model} \
 #     --output ${output} \
 #     --verbose 100 \
 #     --cuda_ids 1 \
 # > ${output}.log 
+
+############################################## CIFAR l1 ##################################################
+# cifar small2, small8, large, resnet
+epspx=2
+model_type=resnet
+model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
+output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+eps=0.0348
+# eps=0.139
+
+python examples/evaluate.py \
+    --model ${model_type} \
+    --epsilon  ${eps} \
+    --proj 50 \
+    --norm l1 \
+    --dataset cifar \
+    --load ${model} \
+    --output ${output} \
+    --verbose 100 \
+    --cuda_ids 2 \
+> ${output}.log 
 
 
 
