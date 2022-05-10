@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     @scriptify
     @dbify('gloro', 'ensemble')
-    def script(model_type="cifar_small_2px",
+    def script(model_type="mnist_large_0_1", # mnist_large_0_1, cifar_small_2px
                root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
                count=3,
                weights=None,
