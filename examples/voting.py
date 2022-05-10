@@ -1,6 +1,8 @@
 import numpy as np
 import argparse
 import csv
+import tensorflow as tf
+
 
 
 def readFile(count=2,
@@ -90,30 +92,32 @@ def matrix_op_robust_voting(y_pred,
     # Construct a groundtruth C_hat matrix with an extra column for the bottom classes
     C_hat = np_onehot(y_true.astype(np.int32), num_classes=num_classes + 1)
 
-    if weights is None and solve_for_weights:
-        w = find_weights(C, C_hat)
-    else:
-        w = np.ones((C.shape[0], ))
+    if weights is None:
+        if solve_for_weights:
+            weights = find_weights(C, C_hat)
+        else:
+            weights = np.ones((C.shape[0], ))
 
     # Do the voting to find the clean prediction
     # index with 0 to remove the redundant axis.
-    votes = np.einsum('ij,jlk->ilk', w[None],
+    votes = np.einsum('ij,jlk->ilk', weights[None],
                       Y)[0]  # shape (n_sampels, n_classes)
     y_ensemble_clean = np.argmax(votes, axis=1)
 
     # Do the voting to find the robust prediction
     # index with 0 to remove the redundant axis.
-    votes = np.einsum('ij,jlk->ilk', w[None],
+    votes = np.einsum('ij,jlk->ilk', weights[None],
                       C)[0]  # shape (n_sampels, n_classes+1)
 
-    # Calculate the top class and the corresponding votes.
-    j = np.argmax(votes[:, :-1], axis=1)
-    votes_j = np.max(votes[:, :-1], axis=1, keepdims=True)
+    # replace the votes for the top class to -1 to
+    # differentiate the votes for the top class and 
+    # other classes that have the same votes
+    votes_bot = votes[:, :-1].copy()
+    np.put_along_axis(votes_bot, y_ensemble_clean[:, None], -1, axis=1)
 
-    # Add votes of bot to all classes except the top class
-    # Also add a small number in case the bottom is 0 and all models vote
-    # for different classes where np.argmax always return the prediction of the first model.
-    votes_bot = np.where(votes_j == votes[:, :-1], votes[:, :-1],
+    # Add the votes for the botom class to all classes except the top.
+    # Also add eps to the votes for the bottom class in case it is 0
+    votes_bot = np.where(votes_bot == -1, votes[:, :-1],
                          votes[:, :-1] + votes[:, -1:] + eps)
 
     # Concatenate the votes of all classes and the votes of the bottom class
@@ -123,7 +127,7 @@ def matrix_op_robust_voting(y_pred,
     robust_j = np.argmax(votes_bot, axis=1)
 
     # the prediction is certified if votes for the top is still the one without adding votes for the bot.
-    y_ensemble_certificate = (robust_j == j).astype(np.int32)
+    y_ensemble_certificate = (robust_j == y_ensemble_clean).astype(np.int32)
 
     acc = np.mean(y_ensemble_clean == y_true)
     vra = np.mean((y_ensemble_clean == y_true) * y_ensemble_certificate)
@@ -131,11 +135,105 @@ def matrix_op_robust_voting(y_pred,
     print("mo voting clean_acc: ", acc)
     print("mo voting vra: ", vra)
 
-    return y_ensemble_clean, y_ensemble_certificate, acc, vra
+    return y_ensemble_clean, y_ensemble_certificate, acc, vra, weights
 
 
-def find_weights(C, C_hat):
-    return
+def find_weights(C, C_hat, use_binary=False):
+    if use_binary:
+        return analytical_weights(C, C_hat)
+    else:
+        return optimize_find_weights(C, C_hat)
+
+
+def analytical_weights(Y_candidates, Y_hat, temp=1e-2):
+    Y_candidates = tf.cast(Y_candidates, tf.float32)
+    Y_hat = tf.cast(Y_hat, tf.float32)
+
+    B = np.zeros_like(Y_hat)
+    B[:, -1] = 1
+    B = tf.constant(B)
+
+    weights = []
+    for k in range(Y_candidates.shape[0]):
+        Y_k = Y_candidates[k]
+
+        #the top and the bot class will be set to -1
+        Y_second = Y_k * (tf.ones_like(Y_k) - 2 * (Y_hat + B))
+        Y_second_softmax = tf.nn.softmax(Y_second / temp, axis=1)
+
+        cond = tf.linalg.trace(Y_k @ tf.transpose(Y_hat)) - tf.linalg.trace(
+            Y_k @ tf.transpose(B)) - tf.linalg.trace(
+                Y_second @ tf.transpose(Y_second_softmax))
+
+        if cond > 0:
+            weights.append(1.0)
+        else:
+            weights.append(0.0) + 1e-6
+
+    weights = tf.constant(weights)
+    weights /= tf.reduce_sum(weights)
+    return weights.numpy()
+
+
+def normalize(x):
+    return x / (tf.reduce_sum(x) + 1e-16)
+
+
+def optimize_find_weights(Y_candidates, Y_hat, steps=2000, lr=1e-1):
+    '''
+    Y_candidates: shape: KxNx(C+1). The one-hot encoding of the predicitons, including \bot, of K models for N points. 
+    Y_hat: shape: Nx(C+1). The one-hot encoding of the labels. 
+    w: shape: K, weights
+    '''
+
+    Y_candidates = tf.cast(Y_candidates, tf.float32)
+    Y_hat = tf.cast(Y_hat, tf.float32)
+
+    K = Y_candidates.shape[0]
+    w = tf.Variable(initial_value=tf.ones((K, )))
+
+    vars = [w]
+
+    B = np.zeros_like(Y_hat)
+    B[:, -1] = 1
+    B = tf.constant(B)
+
+    opt = tf.keras.optimizers.SGD(learning_rate=lr)
+
+    pbar = tf.keras.utils.Progbar(steps)
+
+    relu = tf.keras.layers.Activation('relu')
+    for _ in range(steps):
+        with tf.GradientTape() as tape:
+            # weighted votes (N, C+1)
+
+            valid_w = normalize(relu(w))
+
+            Y = tf.squeeze(
+                tf.einsum('ij,jlk->ilk', valid_w[None], Y_candidates))
+
+            # the votes for the grountruth class
+            y_j = tf.reduce_sum(Y * Y_hat, axis=1)
+
+            # the votes for the bottom class
+            y_bot = tf.reduce_sum(Y * B, axis=1)
+
+            # the votes for the second highest class
+            y_second = tf.reduce_max(Y * (tf.ones_like(Y) - Y_hat - B), axis=1)
+
+            loss = -tf.reduce_mean(y_j - y_bot - y_second)
+            # loss = relu(-(y_j - y_bot - y_second))
+
+            pbar.add(1, [("loss", loss)])
+            grads = tape.gradient(loss, vars)
+
+            opt.apply_gradients(zip(grads, vars))
+
+    valid_w = normalize(relu(w))
+
+    # Y = tf.squeeze(tf.einsum('ij,jlk->ilk', valid_w[None], Y_candidates))
+
+    return normalize(relu(w)).numpy()
 
 
 def cascade(y_pred, y_true, certified):
@@ -192,5 +290,7 @@ if __name__ == "__main__":
     # cascade(y_pred_all, y_true_all, certified_all)
     robust_voting(y_pred_all, y_true_all, certified_all)
 
-    y_ensemble_clean, y_ensemble_certificate, acc, vra = matrix_op_robust_voting(
-        y_pred_all, y_true_all[0], certified_all)
+    y_ensemble_clean, y_ensemble_certificate, acc, vra, weights = matrix_op_robust_voting(
+        y_pred_all, y_true_all[0], certified_all, solve_for_weights=False)
+
+    print(weights)
