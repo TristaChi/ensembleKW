@@ -3,6 +3,8 @@ import argparse
 import csv
 import tensorflow as tf
 
+from dbify import dbify
+from scriptify import scriptify
 
 
 def readFile(count=2,
@@ -110,7 +112,7 @@ def matrix_op_robust_voting(y_pred,
                       C)[0]  # shape (n_sampels, n_classes+1)
 
     # replace the votes for the top class to -1 to
-    # differentiate the votes for the top class and 
+    # differentiate the votes for the top class and
     # other classes that have the same votes
     votes_bot = votes[:, :-1].copy()
     np.put_along_axis(votes_bot, y_ensemble_clean[:, None], -1, axis=1)
@@ -221,7 +223,7 @@ def optimize_find_weights(Y_candidates, Y_hat, steps=2000, lr=1e-1):
             # the votes for the second highest class
             y_second = tf.reduce_max(Y * (tf.ones_like(Y) - Y_hat - B), axis=1)
 
-            loss = -tf.reduce_mean(y_j - y_bot - y_second)
+            loss = -tf.reduce_mean(relu(y_j - y_bot - y_second))
             # loss = relu(-(y_j - y_bot - y_second))
 
             pbar.add(1, [("loss", loss)])
@@ -230,9 +232,6 @@ def optimize_find_weights(Y_candidates, Y_hat, steps=2000, lr=1e-1):
             opt.apply_gradients(zip(grads, vars))
 
     valid_w = normalize(relu(w))
-
-    # Y = tf.squeeze(tf.einsum('ij,jlk->ilk', valid_w[None], Y_candidates))
-
     return normalize(relu(w)).numpy()
 
 
@@ -248,10 +247,10 @@ def cascade(y_pred, y_true, certified):
             elif y_pred[j][i] == y_true[j][i] and j == np.shape(y_pred)[0] - 1:
                 correct = correct + 1
 
-    print("cascade clean_acc: ", correct / np.shape(y_pred)[1], ", error: ",
-          1 - correct / np.shape(y_pred)[1])
-    print("cascade vra: ", vra / np.shape(y_pred)[1], ", error: ",
-          1 - vra / np.shape(y_pred)[1])
+    acc = correct / np.shape(y_pred)[1]
+    vra = vra / np.shape(y_pred)[1]
+
+    return acc, vra
 
 
 def np_onehot(vector, num_classes=None):
@@ -266,31 +265,72 @@ if __name__ == "__main__":
     # args = parser.parse_args()
 
     # readFile(args.filename)
-    model_type = "cifar_small_2px"
-    dir = "/home/chi/NNRobustness/ensembleKW/evalData/l_inf/" + model_type + "/" + model_type
-    count = 3
-    y_pred_all = []
-    y_true_all = []
-    certified_all = []
-    print("results for model type ", model_type)
-    for i in range(count):
-        y_pred, y_true, certified = readFile(count=i, dir=dir, data="test")
 
-        y_pred_all.append(y_pred)
-        y_true_all.append(y_true)
-        certified_all.append(certified)
+    @scriptify
+    @dbify('gloro', 'ensemble')
+    def script(model_type="cifar_small_2px",
+               root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
+               count=3,
+               weights='1.0,1.0,1.0',
+               solve_for_weights=False):
 
-    print("model 0 clean accuracy: ", np.mean(y_pred_all[0] == y_true_all[0]),
-          ", error: ", 1 - np.mean(y_pred_all[0] == y_true_all[0]))
-    print("model 0 vra: ",
-          np.mean((y_pred_all[0] == y_true_all[0]) * certified_all[0]),
-          ", error: ", 1 - np.mean(
-              (y_pred_all[0] == y_true_all[0]) * certified_all[0]))
+        dir = root + model_type + "/" + model_type
+        count = 3
+        y_pred_all = []
+        y_true_all = []
+        certified_all = []
 
-    # cascade(y_pred_all, y_true_all, certified_all)
-    robust_voting(y_pred_all, y_true_all, certified_all)
+        results = {}
 
-    y_ensemble_clean, y_ensemble_certificate, acc, vra, weights = matrix_op_robust_voting(
-        y_pred_all, y_true_all[0], certified_all, solve_for_weights=False)
+        for i in range(count):
+            y_pred, y_true, certified = readFile(count=i, dir=dir, data="test")
 
-    print(weights)
+            y_pred_all.append(y_pred)
+            y_true_all.append(y_true)
+            certified_all.append(certified)
+
+            # print(f"model {i} clean accuracy: ",
+            #       np.mean(y_pred_all[-1] == y_true), ", error: ",
+            #       1 - np.mean(y_pred_all[-1] == y_true))
+            # print(f"model {i} vra: ",
+            #       np.mean((y_pred_all[-1] == y_true) * certified_all[-1]),
+            #       ", error: ", 1 - np.mean(
+            #           (y_pred_all[-1] == y_true) * certified_all[-1]))
+
+            acc = np.mean(y_pred_all[-1] == y_true)
+            vra = np.mean((y_pred_all[-1] == y_true) * certified_all[-1])
+
+            results.update({
+                f"model_{i}_acc": float(acc),
+                f"model_{i}_vra": float(vra)
+            })
+
+        cas_acc, cas_vra = cascade(y_pred_all, y_true_all, certified_all)
+
+        results.update({
+            f"cas_acc": float(cas_acc),
+            f"cas_vra": float(cas_vra)
+        })
+
+        if weights is not None:
+            weights = np.array(list(map(float, weights.split(','))))
+
+        _, _, vote_acc, vote_vra, weights = matrix_op_robust_voting(
+            y_pred_all,
+            y_true,
+            certified_all,
+            solve_for_weights=solve_for_weights,
+            weights=None)
+
+        results.update({
+            f"vote_acc": float(vote_acc),
+            f"vote_vra": float(vote_vra)
+        })
+
+        weights = str(list(weights))
+
+        results.update({'ensemble_weights': weights})
+
+        print(results)
+
+        return results
