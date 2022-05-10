@@ -271,7 +271,7 @@ if __name__ == "__main__":
     def script(model_type="cifar_small_2px",
                root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
                count=3,
-               weights='1.0,1.0,1.0',
+               weights=None,
                solve_for_weights=False):
 
         dir = root + model_type + "/" + model_type
@@ -289,14 +289,6 @@ if __name__ == "__main__":
             y_true_all.append(y_true)
             certified_all.append(certified)
 
-            # print(f"model {i} clean accuracy: ",
-            #       np.mean(y_pred_all[-1] == y_true), ", error: ",
-            #       1 - np.mean(y_pred_all[-1] == y_true))
-            # print(f"model {i} vra: ",
-            #       np.mean((y_pred_all[-1] == y_true) * certified_all[-1]),
-            #       ", error: ", 1 - np.mean(
-            #           (y_pred_all[-1] == y_true) * certified_all[-1]))
-
             acc = np.mean(y_pred_all[-1] == y_true)
             vra = np.mean((y_pred_all[-1] == y_true) * certified_all[-1])
 
@@ -312,15 +304,31 @@ if __name__ == "__main__":
             f"cas_vra": float(cas_vra)
         })
 
-        if weights is not None:
+        if weights is not None and not solve_for_weights:
             weights = np.array(list(map(float, weights.split(','))))
+
+        elif solve_for_weights:
+            train_y_pred_all = []
+            train_certified_all = []
+            for i in range(count):
+                train_y_pred, train_y_true, train_certified = readFile(count=i, dir=dir, data="train")
+
+                train_y_pred_all.append(train_y_pred)
+                train_certified_all.append(train_certified)
+
+            _, _, _, _, weights = matrix_op_robust_voting(
+                train_y_pred_all,
+                train_y_true,
+                train_certified,
+                solve_for_weights=True,
+                weights=None)
 
         _, _, vote_acc, vote_vra, weights = matrix_op_robust_voting(
             y_pred_all,
             y_true,
             certified_all,
-            solve_for_weights=solve_for_weights,
-            weights=None)
+            solve_for_weights=False,
+            weights=weights)
 
         results.update({
             f"vote_acc": float(vote_acc),
