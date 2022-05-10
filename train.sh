@@ -14,7 +14,21 @@ python examples/mnist.py \
     --norm_train l1 \
     --norm_test l1 \
     --cascade 6 \
-    --cuda_ids 1 \
+    --cuda_ids 0 \
+> ${file}/smallExact1/${name}.out
+
+name=cas
+python examples/mnist.py \
+    --epochs 60 \
+    --epsilon 1.58 \
+    --starting_epsilon 0.01 \
+    --schedule_length 20 \
+    --prefix ${file}/smallExact158/${name} \
+    --verbose 200 \
+    --norm_train l2 \
+    --norm_test l2 \
+    --cascade 6 \
+    --cuda_ids 0 \
 > ${file}/smallExact1/${name}.out
 
 ####### mnist small1, small3 #######
