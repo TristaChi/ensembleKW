@@ -275,7 +275,6 @@ if __name__ == "__main__":
                solve_for_weights=False):
 
         dir = root + model_type + "/" + model_type
-        count = 3
         y_pred_all = []
         y_true_all = []
         certified_all = []
