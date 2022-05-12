@@ -114,15 +114,15 @@ if __name__ == "__main__":
         model.eval()
 
     for j,model in enumerate(models):
-        # if j < 4: continue
+        # if j < 5: continue
         train_log = open(args.output+str(j)+"_train", "w")
-        test_log = open(args.output+str(j)+"_test", "w")
+        # test_log = open(args.output+str(j)+"_test", "w")
 
         err = evaluate_robustness(train_loader, model,
             args.epsilon, 0, train_log, args.verbose,
             norm_type=args.norm, bounded_input=False, proj=args.proj)
-        err = evaluate_robustness(test_loader, model,
-            args.epsilon, 0, test_log, args.verbose,
-            norm_type=args.norm, bounded_input=False, proj=args.proj)
+        # err = evaluate_robustness(test_loader, model,
+        #     args.epsilon, 0, test_log, args.verbose,
+        #     norm_type=args.norm, bounded_input=False, proj=args.proj)
 
     
