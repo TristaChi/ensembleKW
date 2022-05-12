@@ -260,11 +260,6 @@ def np_onehot(vector, num_classes=None):
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--filename', default=opt)
-    # args = parser.parse_args()
-
-    # readFile(args.filename)
 
     @scriptify
     @dbify('gloro', 'ensemble')
@@ -272,8 +267,8 @@ if __name__ == "__main__":
                root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
                count=3,
                weights=None,
-               solve_for_weights=False):
-
+               solve_for_weights=None):
+        
         dir = root + model_type + "/" + model_type
         y_pred_all = []
         y_true_all = []
