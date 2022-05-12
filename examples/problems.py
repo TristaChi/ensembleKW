@@ -66,7 +66,7 @@ class Flatten(nn.Module):
 def mnist_loaders(batch_size, shuffle_test=False): 
     mnist_train = datasets.MNIST("./data", train=True, download=True, transform=transforms.ToTensor())
     mnist_test = datasets.MNIST("./data", train=False, download=True, transform=transforms.ToTensor())
-    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=True, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(mnist_train, batch_size=batch_size, shuffle=False, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=shuffle_test, pin_memory=True)
     return train_loader, test_loader
 
@@ -208,15 +208,15 @@ def cifar_loaders(batch_size, shuffle_test=False):
                                      std=[0.225, 0.225, 0.225])
     train = datasets.CIFAR10('./data', train=True, download=True, 
         transform=transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomCrop(32, 4),
+            # transforms.RandomHorizontalFlip(),
+            # transforms.RandomCrop(32, 4),
             transforms.ToTensor(),
             normalize,
         ]))
     test = datasets.CIFAR10('./data', train=False, 
         transform=transforms.Compose([transforms.ToTensor(), normalize]), download=True)
     train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size,
-        shuffle=True, pin_memory=True)
+        shuffle=False, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test, batch_size=batch_size,
         shuffle=shuffle_test, pin_memory=True)
     return train_loader, test_loader
