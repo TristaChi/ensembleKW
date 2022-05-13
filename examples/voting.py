@@ -193,7 +193,8 @@ def optimize_find_weights(Y_candidates,
             y_bot = tf.reduce_sum(Y * B, axis=1)
 
             # the votes for the highest class except the groudtruth and the bottom classes
-            y_second = tf.reduce_sum(Y * softmax(Y * (1 - Y_hat - B) / t2))
+            # y_second = tf.reduce_sum(Y * softmax(Y * (1 - Y_hat - B) / t2))
+            y_second = tf.reduce_max(Y * (1 - Y_hat - B))
 
             margin = y_j - y_bot - y_second
 
@@ -238,7 +239,7 @@ def np_onehot(vector, num_classes=None):
 if __name__ == "__main__":
 
     @scriptify
-    @dbify('gloro', 'ensemble')
+    # @dbify('gloro', 'ensemble')
     def script(
             model_type="mnist_large_0_1",  # mnist_large_0_1, cifar_small_2px
             root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
