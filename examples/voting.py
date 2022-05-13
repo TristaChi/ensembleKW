@@ -134,54 +134,23 @@ def matrix_op_robust_voting(y_pred,
     acc = np.mean(y_ensemble_clean == y_true)
     vra = np.mean((y_ensemble_clean == y_true) * y_ensemble_certificate)
 
-    print("mo voting clean_acc: ", acc)
-    print("mo voting vra: ", vra)
-
     return y_ensemble_clean, y_ensemble_certificate, acc, vra, weights
 
 
-def find_weights(C, C_hat, use_binary=False):
-    if use_binary:
-        return analytical_weights(C, C_hat)
-    else:
-        return optimize_find_weights(C, C_hat)
-
-
-def analytical_weights(Y_candidates, Y_hat, temp=1e-2):
-    Y_candidates = tf.cast(Y_candidates, tf.float32)
-    Y_hat = tf.cast(Y_hat, tf.float32)
-
-    B = np.zeros_like(Y_hat)
-    B[:, -1] = 1
-    B = tf.constant(B)
-
-    weights = []
-    for k in range(Y_candidates.shape[0]):
-        Y_k = Y_candidates[k]
-
-        #the top and the bot class will be set to -1
-        Y_second = Y_k * (tf.ones_like(Y_k) - 2 * (Y_hat + B))
-        Y_second_softmax = tf.nn.softmax(Y_second / temp, axis=1)
-
-        cond = tf.linalg.trace(Y_k @ tf.transpose(Y_hat)) - tf.linalg.trace(
-            Y_k @ tf.transpose(B)) - tf.linalg.trace(
-                Y_second @ tf.transpose(Y_second_softmax))
-
-        if cond > 0:
-            weights.append(1.0)
-        else:
-            weights.append(0.0) + 1e-6
-
-    weights = tf.constant(weights)
-    weights /= tf.reduce_sum(weights)
-    return weights.numpy()
+def find_weights(C, C_hat):
+    return optimize_find_weights(C, C_hat)
 
 
 def normalize(x):
     return x / (tf.reduce_sum(x) + 1e-16)
 
 
-def optimize_find_weights(Y_candidates, Y_hat, steps=2000, lr=1e-1):
+def optimize_find_weights(Y_candidates,
+                          Y_hat,
+                          steps=1000,
+                          lr=1e-1,
+                          t1=1e4,
+                          t2=1e-3):
     '''
     Y_candidates: shape: KxNx(C+1). The one-hot encoding of the predicitons, including \bot, of K models for N points. 
     Y_hat: shape: Nx(C+1). The one-hot encoding of the labels. 
@@ -200,16 +169,18 @@ def optimize_find_weights(Y_candidates, Y_hat, steps=2000, lr=1e-1):
     B[:, -1] = 1
     B = tf.constant(B)
 
-    opt = tf.keras.optimizers.SGD(learning_rate=lr)
+    opt = tf.keras.optimizers.Adam(learning_rate=lr)
 
     pbar = tf.keras.utils.Progbar(steps)
 
-    relu = tf.keras.layers.Activation('relu')
+    sigmoid = tf.nn.sigmoid
+    softmax = tf.nn.softmax
+
     for _ in range(steps):
         with tf.GradientTape() as tape:
             # weighted votes (N, C+1)
-
-            valid_w = normalize(relu(w))
+            tape.watch(w)
+            valid_w = softmax(w)
 
             Y = tf.squeeze(
                 tf.einsum('ij,jlk->ilk', valid_w[None], Y_candidates))
@@ -220,19 +191,23 @@ def optimize_find_weights(Y_candidates, Y_hat, steps=2000, lr=1e-1):
             # the votes for the bottom class
             y_bot = tf.reduce_sum(Y * B, axis=1)
 
-            # the votes for the second highest class
-            y_second = tf.reduce_max(Y * (tf.ones_like(Y) - Y_hat - B), axis=1)
+            # the votes for the highest class except the groudtruth and the bottom classes
+            y_second = tf.reduce_sum(Y * softmax(Y * (1 - Y_hat - B) / t2))
 
-            loss = -tf.reduce_mean(relu(y_j - y_bot - y_second))
-            # loss = relu(-(y_j - y_bot - y_second))
+            margin = y_j - y_bot - y_second
 
-            pbar.add(1, [("loss", loss)])
-            grads = tape.gradient(loss, vars)
+            loss = -tf.reduce_mean(sigmoid(margin / t1))
+            # loss = tf.reduce_mean(relu(-(y_j - y_bot - y_second)))
 
-            opt.apply_gradients(zip(grads, vars))
+        grads = tape.gradient(loss, vars)
+        pbar.add(1, [("loss", loss),
+                     ('margin', tf.reduce_mean(margin))] + [(f"w{i}", w[i])
+                                                            for i in range(K)])
 
-    valid_w = normalize(relu(w))
-    return normalize(relu(w)).numpy()
+        opt.apply_gradients(zip(grads, vars))
+
+    valid_w = softmax(w)
+    return valid_w.numpy()
 
 
 def cascade(y_pred, y_true, certified):
@@ -263,12 +238,13 @@ if __name__ == "__main__":
 
     @scriptify
     @dbify('gloro', 'ensemble')
-    def script(model_type="mnist_large_0_1", # mnist_large_0_1, cifar_small_2px
-               root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
-               count=3,
-               weights=None,
-               solve_for_weights=None):
-        
+    def script(
+            model_type="mnist_large_0_1",  # mnist_large_0_1, cifar_small_2px
+            root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
+            count=3,
+            weights=None,
+            solve_for_weights=False):
+
         dir = root + model_type + "/" + model_type
         y_pred_all = []
         y_true_all = []
@@ -305,7 +281,8 @@ if __name__ == "__main__":
             train_y_pred_all = []
             train_certified_all = []
             for i in range(count):
-                train_y_pred, train_y_true, train_certified = readFile(count=i, dir=dir, data="train")
+                train_y_pred, train_y_true, train_certified = readFile(
+                    count=i, dir=dir, data="train")
 
                 train_y_pred_all.append(train_y_pred)
                 train_certified_all.append(train_certified)
