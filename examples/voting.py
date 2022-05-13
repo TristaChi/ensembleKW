@@ -144,12 +144,14 @@ def find_weights(C, C_hat):
 def normalize(x):
     return x / (tf.reduce_sum(x) + 1e-16)
 
+def half_temp_sigmoid(x, temp):
+    return tf.where(x<=0, tf.nn.sigmoid(x/temp), tf.nn.sigmoid(x))
 
 def optimize_find_weights(Y_candidates,
                           Y_hat,
                           steps=1000,
                           lr=1e-1,
-                          t1=1e4,
+                          t1=1e5,
                           t2=1e-3):
     '''
     Y_candidates: shape: KxNx(C+1). The one-hot encoding of the predicitons, including \bot, of K models for N points. 
@@ -173,7 +175,6 @@ def optimize_find_weights(Y_candidates,
 
     pbar = tf.keras.utils.Progbar(steps)
 
-    sigmoid = tf.nn.sigmoid
     softmax = tf.nn.softmax
 
     for _ in range(steps):
@@ -196,7 +197,7 @@ def optimize_find_weights(Y_candidates,
 
             margin = y_j - y_bot - y_second
 
-            loss = -tf.reduce_mean(sigmoid(margin / t1))
+            loss = -tf.reduce_mean(half_temp_sigmoid(margin, t1))
             # loss = tf.reduce_mean(relu(-(y_j - y_bot - y_second)))
 
         grads = tape.gradient(loss, vars)
