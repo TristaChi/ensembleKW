@@ -58,8 +58,8 @@ def robust_verify(models, epsilon, X, **kwargs):
     return out.max(1)[1], certified
 
 def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
-    acc = AverageMeter()
-    vra = AverageMeter()
+    # acc = AverageMeter()
+    # vra = AverageMeter()
     
     for i, (X,y) in enumerate(loader):
         X,y = X.cuda(), y.cuda().long()
@@ -69,15 +69,15 @@ def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
                                         epsilon, 
                                         Variable(X), 
                                         **kwargs)
-        acc.update(y_pred==y)
-        vra.update((y_pred==y)*certified)
+        # acc.update(y_pred==y)
+        # vra.update((y_pred==y)*certified)
         print(i, y_pred.item(), y.item(), certified, file=log)
         
         if verbose and i % verbose == 0: 
             print(i, y_pred.item(), y.item(), certified)
 
     torch.set_grad_enabled(True)
-    return vra.avg
+    return True
 
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         model.eval()
 
     for j,model in enumerate(models):
-        # if j < 5: continue
+        if j != 0: continue
         train_log = open(args.output+str(j)+"_train", "w")
         # test_log = open(args.output+str(j)+"_test", "w")
 
