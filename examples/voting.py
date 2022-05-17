@@ -87,7 +87,6 @@ def matrix_op_robust_voting(y_pred,
                                (np.zeros_like(c) + num_classes).astype(
                                    np.int32)),
                       num_classes=num_classes + 1)[None])
-
     Y = np.vstack(Y)
     C = np.vstack(C)
 
@@ -176,7 +175,6 @@ def optimize_find_weights(Y_candidates,
     pbar = tf.keras.utils.Progbar(steps)
 
     softmax = tf.nn.softmax
-
     for _ in range(steps):
         with tf.GradientTape() as tape:
             # weighted votes (N, C+1)
@@ -188,17 +186,13 @@ def optimize_find_weights(Y_candidates,
 
             # the votes for the grountruth class
             y_j = tf.reduce_sum(Y * Y_hat, axis=1)
-            # print(y_j)
             # the votes for the bottom class
             y_bot = tf.reduce_sum(Y * B, axis=1)
-            # print(y_bot)
             # the votes for the highest class except the groudtruth and the bottom classes
             # y_second = tf.reduce_sum(Y * softmax(Y * (1 - Y_hat - B) / t2))
             # y_second = tf.reduce_max(Y * (1 - Y_hat - B))
             y_second = tf.reduce_max(Y * (1 - Y_hat - B), axis=1)
-            # print(y_second)
             margin = y_j - y_bot - y_second
-            # print(margin)
             loss = -tf.reduce_mean(half_temp_sigmoid(margin, t1))
             # loss = tf.reduce_mean(relu(-(y_j - y_bot - y_second)))
 
@@ -283,42 +277,42 @@ if __name__ == "__main__":
             f"cas_vra": float(cas_vra)
         })
 
-        # if weights is not None and not solve_for_weights:
-        #     weights = np.array(list(map(float, weights.split(','))))
+        if weights is not None and not solve_for_weights:
+            weights = np.array(list(map(float, weights.split(','))))
 
-        # elif solve_for_weights:
-        #     train_y_pred_all = []
-        #     train_certified_all = []
-        #     for i in range(count):
-        #         train_y_pred, train_y_true, train_certified = readFile(
-        #             count=i, dir=dir, data="train")
+        elif solve_for_weights:
+            train_y_pred_all = []
+            train_certified_all = []
+            for i in range(count):
+                train_y_pred, train_y_true, train_certified = readFile(
+                    count=i, dir=dir, data="train")
 
-        #         train_y_pred_all.append(train_y_pred)
-        #         train_certified_all.append(train_certified)
+                train_y_pred_all.append(train_y_pred)
+                train_certified_all.append(train_certified)
 
-        #     _, _, _, _, weights = matrix_op_robust_voting(
-        #         train_y_pred_all,
-        #         train_y_true,
-        #         train_certified,
-        #         solve_for_weights=True,
-        #         weights=None)
+            _, _, _, _, weights = matrix_op_robust_voting(
+                train_y_pred_all,
+                train_y_true,
+                train_certified_all,
+                solve_for_weights=True,
+                weights=None)
 
-        # _, _, vote_acc, vote_vra, weights = matrix_op_robust_voting(
-        #     y_pred_all,
-        #     y_true,
-        #     certified_all,
-        #     solve_for_weights=False,
-        #     weights=weights)
+        _, _, vote_acc, vote_vra, weights = matrix_op_robust_voting(
+            y_pred_all,
+            y_true,
+            certified_all,
+            solve_for_weights=False,
+            weights=weights)
 
-        # results.update({
-        #     f"vote_acc": float(vote_acc),
-        #     f"vote_vra": float(vote_vra)
-        # })
+        results.update({
+            f"vote_acc": float(vote_acc),
+            f"vote_vra": float(vote_vra)
+        })
 
-        # weights = str(list(weights))
+        weights = str(list(weights))
 
-        # results.update({'ensemble_weights': weights})
+        results.update({'ensemble_weights': weights})
 
-        # print(results)
+        print(results)
 
         return results
