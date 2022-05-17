@@ -27,34 +27,34 @@
 
 ############################################## CIFAR l1.l2 ##################################################
 # cifar small2, small8, large, resnet
-# epspx=2
-# model_type=large
-# norm=l1
+epspx=36
+model_type=large
+norm=l2
 # model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
-# # model="/home/chi/NNRobustness/ensembleKW/models/models_scaled_l2/cifar_${model_type}_${epspx}px.pth"
+model="/home/chi/NNRobustness/ensembleKW/models/models_scaled_l2/cifar_${model_type}_${epspx}px.pth"
 # output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
-# # output="/home/chi/NNRobustness/ensembleKW/evalData/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+output="/home/chi/NNRobustness/ensembleKW/evalData/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
 
 # eps=0.0348
-# # eps=0.139
-# # eps=0.157 # l2
+# eps=0.139
+eps=0.157 # l2
 
-# python examples/evaluate.py \
-#     --model ${model_type} \
-#     --epsilon  ${eps} \
-#     --proj 50 \
-#     --norm ${norm} \
-#     --dataset cifar \
-#     --load ${model} \
-#     --output ${output} \
-#     --verbose 100 \
-#     --cuda_ids 1 \
-# > ${output}.log 
+python examples/evaluate.py \
+    --model ${model_type} \
+    --epsilon  ${eps} \
+    --proj 50 \
+    --norm ${norm} \
+    --dataset cifar \
+    --load ${model} \
+    --output ${output} \
+    --verbose 100 \
+    --cuda_ids 2 \
+> ${output}.log 
 
 ############################################## mnist l2 ##################################################
 
 # mnist small exact, small, large
-# model_type=small_exact
+# model_type=large
 # norm=l2
 # model="/home/chi/NNRobustness/ensembleKW/models/models_scaled_l2/mnist_${model_type}.pth"
 # output="/home/chi/NNRobustness/ensembleKW/evalData/l_2/mnist_${model_type}/mnist_${model_type}_"
@@ -70,7 +70,7 @@
 #     --load ${model} \
 #     --output ${output} \
 #     --verbose 100 \
-#     --cuda_ids 0 \
+#     --cuda_ids 1 \
 # > ${output}.log 
 
 
@@ -91,41 +91,41 @@
 #     --load ${model} \
 #     --output ${output} \
 #     --verbose 100 \
+#     --cuda_ids 0 \
+# > ${output}.log 
+
+# epspx=8
+# model_type=small
+# norm=l1
+# model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
+# output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+# eps=0.139
+# python examples/evaluate.py \
+#     --model ${model_type} \
+#     --epsilon  ${eps} \
+#     --proj 50 \
+#     --norm ${norm} \
+#     --dataset cifar \
+#     --load ${model} \
+#     --output ${output} \
+#     --verbose 100 \
 #     --cuda_ids 1 \
 # > ${output}.log 
 
-epspx=8
-model_type=small
-norm=l1
-model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
-output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
-eps=0.139
-python examples/evaluate.py \
-    --model ${model_type} \
-    --epsilon  ${eps} \
-    --proj 50 \
-    --norm ${norm} \
-    --dataset cifar \
-    --load ${model} \
-    --output ${output} \
-    --verbose 100 \
-    --cuda_ids 1 \
-> ${output}.log 
-
-epspx=2
-model_type=small
-norm=l1
-model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
-output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
-eps=0.0348
-python examples/evaluate.py \
-    --model ${model_type} \
-    --epsilon  ${eps} \
-    --proj 50 \
-    --norm ${norm} \
-    --dataset cifar \
-    --load ${model} \
-    --output ${output} \
-    --verbose 100 \
-    --cuda_ids 1 \
-> ${output}.log 
+# epspx=2
+# model_type=small
+# norm=l1
+# model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
+# output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+# eps=0.0348
+# python examples/evaluate.py \
+#     --model ${model_type} \
+#     --epsilon  ${eps} \
+#     --proj 50 \
+#     --norm ${norm} \
+#     --dataset cifar \
+#     --load ${model} \
+#     --output ${output} \
+#     --verbose 100 \
+#     --cuda_ids 1 \
+# > ${output}.log 
