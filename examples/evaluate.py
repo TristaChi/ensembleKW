@@ -60,12 +60,15 @@ def robust_verify(models, epsilon, X, **kwargs):
 def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
     # acc = AverageMeter()
     # vra = AverageMeter()
-    
+
     for i, (X,y) in enumerate(loader):
+        torch.cuda.empty_cache()
+        print("memory_reserved: ",torch.cuda.memory_reserved())
+        print("memory_allocated: ",torch.cuda.memory_allocated())
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
-        y_pred, certified = robust_verify(models, 
+        y_pred, certified = robust_verify(model, 
                                         epsilon, 
                                         Variable(X), 
                                         **kwargs)
@@ -75,8 +78,9 @@ def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
         
         if verbose and i % verbose == 0: 
             print(i, y_pred.item(), y.item(), certified)
-
-    torch.set_grad_enabled(True)
+        
+        
+        torch.set_grad_enabled(True)
     return True
 
 torch.manual_seed(0)
@@ -114,7 +118,7 @@ if __name__ == "__main__":
         model.eval()
 
     for j,model in enumerate(models):
-        if j != 0: continue
+        if j < 1: continue
         train_log = open(args.output+str(j)+"_train", "w")
         # test_log = open(args.output+str(j)+"_test", "w")
 
@@ -124,5 +128,3 @@ if __name__ == "__main__":
         # err = evaluate_robustness(test_loader, model,
         #     args.epsilon, 0, test_log, args.verbose,
         #     norm_type=args.norm, bounded_input=False, proj=args.proj)
-
-    
