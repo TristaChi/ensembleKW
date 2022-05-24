@@ -10,6 +10,9 @@ The experimental support for cascading ensemble (unsound) and alternatively weig
 For all ensemble strategies, we used pre-trained and self-trained Kolter Wong models.
 
 ## What is in this repository?
+### Toy examples
+`example/2D.ipynb` and `example/TwoMoon.ipynb` generate two-dimensional toy examples on different ensemble strategies for visualization. 
+
 ### Models
 `/models/models_scaled/` and `/models/models_scaled_l2/`: models pre-trained by Wong et al. under cascade trainning strategy. 
 `/models/more_models/`: non-sequentially self trained models. 
