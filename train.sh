@@ -1,4 +1,4 @@
-################################################## MNIST l1 ##################################################
+################################################## MNIST ##################################################
 file=/longterm/chi/KwModels/MNIST
 # file=./models/MNIST
 
@@ -16,6 +16,8 @@ python examples/mnist.py \
     --cascade 6 \
     --cuda_ids 0 \
 > ${file}/smallExact1/${name}.out
+
+####### mnist small exact 158 #######
 
 name=cas
 python examples/mnist.py \

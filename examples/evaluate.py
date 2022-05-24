@@ -46,25 +46,17 @@ def robust_verify(models, epsilon, X, **kwargs):
     else:
         rl = robust_loss
 
-    
-
     out = model(X)
     _, uncertified = rl(model, epsilon, X,
                                     out.max(1)[1],
                                     size_average=False, **kwargs)
 
-    # certified = ~uncertified
     certified = 0 if uncertified else 1
     return out.max(1)[1], certified
 
 def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
-    # acc = AverageMeter()
-    # vra = AverageMeter()
 
     for i, (X,y) in enumerate(loader):
-        torch.cuda.empty_cache()
-        print("memory_reserved: ",torch.cuda.memory_reserved())
-        print("memory_allocated: ",torch.cuda.memory_allocated())
         X,y = X.cuda(), y.cuda().long()
         if y.dim() == 2: 
             y = y.squeeze(1)
@@ -72,13 +64,11 @@ def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
                                         epsilon, 
                                         Variable(X), 
                                         **kwargs)
-        # acc.update(y_pred==y)
-        # vra.update((y_pred==y)*certified)
+
         print(i, y_pred.item(), y.item(), certified, file=log)
         
         if verbose and i % verbose == 0: 
             print(i, y_pred.item(), y.item(), certified)
-        
         
         torch.set_grad_enabled(True)
     return True
@@ -94,16 +84,12 @@ if __name__ == "__main__":
     print("saving file to {}".format(args.output))
     setproctitle.setproctitle(args.output)
 
-    
-
     if args.dataset == "mnist":
         train_loader, test_loader = pblm.mnist_loaders(1)
         select_model = select_mnist_model
     elif args.dataset == "cifar":
         train_loader, test_loader = pblm.cifar_loaders(1)
         select_model = select_cifar_model
-
-
 
     d = torch.load(args.load)
 
@@ -118,13 +104,12 @@ if __name__ == "__main__":
         model.eval()
 
     for j,model in enumerate(models):
-        if j < 1: continue
         train_log = open(args.output+str(j)+"_train", "w")
-        # test_log = open(args.output+str(j)+"_test", "w")
+        test_log = open(args.output+str(j)+"_test", "w")
 
         err = evaluate_robustness(train_loader, model,
             args.epsilon, 0, train_log, args.verbose,
             norm_type=args.norm, bounded_input=False, proj=args.proj)
-        # err = evaluate_robustness(test_loader, model,
-        #     args.epsilon, 0, test_log, args.verbose,
-        #     norm_type=args.norm, bounded_input=False, proj=args.proj)
+        err = evaluate_robustness(test_loader, model,
+            args.epsilon, 0, test_log, args.verbose,
+            norm_type=args.norm, bounded_input=False, proj=args.proj)

@@ -18,37 +18,6 @@ def readFile(count=2,
     return y_pred, y_true, certified
 
 
-def robust_voting(y_pred, y_true, certified):
-    acc = 0
-    vra = 0
-    for i in range(np.shape(y_pred)[1]):
-        count_vra = np.zeros(int(max(y_pred[0])) + 1)
-        bot = np.shape(certified)[0] - sum([row[i] for row in certified])
-        count_vra[int(y_true[0][i])] -= bot  # add bottom to count_vra
-
-        count_acc = np.zeros(int(max(y_pred[0])) + 1)
-
-        for j in range(np.shape(y_pred)[0]):
-            if certified[j][i] == 1: count_vra[int(y_pred[j][i])] += 1
-            count_acc[int(y_pred[j][i])] += 1
-
-        # j - j_true
-        count_vra -= np.full_like(count_vra, count_vra[int(y_true[0][i])])
-        count_vra[int(y_true[0][i])] = -1
-
-        count_acc -= np.full_like(count_acc, count_acc[int(y_true[0][i])])
-        count_acc[int(y_true[0][i])] = -1
-
-        # j_true is j_max
-        if sum(count_vra < 0) == len(count_vra): vra += 1
-        if sum(count_acc < 0) == len(count_acc): acc += 1
-
-    print("voting clean_acc: ", acc / np.shape(y_pred)[1], ", error: ",
-          1 - acc / np.shape(y_pred)[1])
-    print("voting vra: ", vra / np.shape(y_pred)[1], ", error: ",
-          1 - vra / np.shape(y_pred)[1])
-
-
 def matrix_op_robust_voting(y_pred,
                             y_true,
                             certified,
@@ -208,15 +177,24 @@ def optimize_find_weights(Y_candidates,
 
 
 def cascade(y_pred, y_true, certified):
+    ''' use pre-evaluated data for cascade ensemble algorithm
+
+    Args:
+        y_pred: list of np.array. Pedictions for each models
+        y_true: np.array of shape (n_smaples,). True labels.
+        certified: list of np.array. Boolean array indicating whether the prediction is certified.
+    
+    Returns:
+        acc: float. Accuracy of the ensemble
+        vra: float. VRA of the ensemble
+
+    '''
     correct = 0
     vra = 0
-    print("-- shape of y_pred", np.shape(y_pred))
-    print("-- shape of y_true", np.shape(y_true))
     for i in range(np.shape(y_pred)[1]):
         # for each input point
         for j in range(np.shape(y_pred)[0]):
             # for each model
-            # TODO: 
             if certified[j][i] == 1:
                 if y_pred[j][i] == y_true[j][i]:
                     correct = correct + 1
@@ -240,7 +218,7 @@ def np_onehot(vector, num_classes=None):
 if __name__ == "__main__":
 
     @scriptify
-    # @dbify('gloro', 'ensemble')
+    @dbify('gloro', 'ensemble')
     def script(
             model_type="mnist_large_0_1",  # mnist_large_0_1, cifar_small_2px
             root="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/",
@@ -256,6 +234,7 @@ if __name__ == "__main__":
         results = {}
 
         for i in range(count):
+            # read all pre-evaluated files
             y_pred, y_true, certified = readFile(count=i, dir=dir, data="test")
 
             y_pred_all.append(y_pred)
@@ -278,9 +257,11 @@ if __name__ == "__main__":
         })
 
         if weights is not None and not solve_for_weights:
+            # voting with given weights
             weights = np.array(list(map(float, weights.split(','))))
 
         elif solve_for_weights:
+            # use evaluation on train dataset to find optimized weights
             train_y_pred_all = []
             train_certified_all = []
             for i in range(count):
