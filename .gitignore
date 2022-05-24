@@ -131,4 +131,3 @@ dmypy.json
 **.gz
 /data/*
 **/nohup.out
-/evalData/*
