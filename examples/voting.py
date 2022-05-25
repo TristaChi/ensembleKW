@@ -219,13 +219,13 @@ if __name__ == "__main__":
     @scriptify
     def script(
             model_type="mnist_large_0_1",  # mnist_large_0_1, cifar_small_2px
-            norm="l_2",
+            norm="l_inf",
             count=3,
             weights=None,
             solve_for_weights=False,
             seq=False):
-        if seq: dir = "./ensembleKW/evalData/seq_trained/" + norm + "/" + model_type + "/" + model_type
-        else: dir = "./ensembleKW/evalData/non_seq_trained/" + norm + "/" + model_type + "/more_" + model_type
+        if seq: dir = "./evalData/seq_trained/" + norm + "/" + model_type + "/" + model_type
+        else: dir = "./evalData/non_seq_trained/" + norm + "/" + model_type + "/more_" + model_type
         y_pred_all = []
         y_true_all = []
         certified_all = []
