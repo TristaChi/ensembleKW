@@ -6,8 +6,8 @@
 
 #     model_type=large
 #     norm=l1
-#     model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/mnist_${model_type}_0_${eps}.pth"
-#     output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_"
+#     model="/home/anonymous/NNRobustness/ensembleKW/models/models_scaled/mnist_${model_type}_0_${eps}.pth"
+#     output="/home/anonymous/NNRobustness/ensembleKW/evalData/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_"
 
 
 #     python examples/evaluate.py \
@@ -30,10 +30,10 @@
 epspx=36
 model_type=large
 norm=l2
-# model="/home/chi/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
-model="/home/chi/NNRobustness/ensembleKW/models/models_scaled_l2/cifar_${model_type}_${epspx}px.pth"
-# output="/home/chi/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
-output="/home/chi/NNRobustness/ensembleKW/evalData/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+# model="/home/anonymous/NNRobustness/ensembleKW/models/models_scaled/cifar_${model_type}_${epspx}px.pth"
+model="/home/anonymous/NNRobustness/ensembleKW/models/models_scaled_l2/cifar_${model_type}_${epspx}px.pth"
+# output="/home/anonymous/NNRobustness/ensembleKW/evalData/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+output="/home/anonymous/NNRobustness/ensembleKW/evalData/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
 
 # eps=0.0348
 # eps=0.139
@@ -56,8 +56,8 @@ python examples/evaluate.py \
 # mnist small exact, small, large
 # model_type=large
 # norm=l2
-# model="/home/chi/NNRobustness/ensembleKW/models/models_scaled_l2/mnist_${model_type}.pth"
-# output="/home/chi/NNRobustness/ensembleKW/evalData/l_2/mnist_${model_type}/mnist_${model_type}_"
+# model="/home/anonymous/NNRobustness/ensembleKW/models/models_scaled_l2/mnist_${model_type}.pth"
+# output="/home/anonymous/NNRobustness/ensembleKW/evalData/l_2/mnist_${model_type}/mnist_${model_type}_"
 
 # eps=1.58
 

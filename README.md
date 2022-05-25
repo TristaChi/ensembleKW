@@ -12,7 +12,7 @@ For all ensemble strategies, we used pre-trained and self-trained Kolter Wong mo
 ## Visualization of Cascading Ensemble unsoundness
 
 <p align = "center">
-<img src = "https://github.com/TristaChi/ensembleKW/blob/main/examples/ensemble.png">
+<img src = "examples/ensemble.png">
 </p>
 <p align = "left">
 These figures are visualizing classification results of 2D points for constituent models (a-c) and the corresponding Cascading Ensemble (d) and Uniform Voting Ensemble (e). Regions with colors correspond to predictions (0: red, 1: blue, 2: green) made by the underlying model (or ensemble). Darker colors indicate that the accompanying robustness certification of the underlying model (or ensemble) returns 1 and lighter colors are for cases when the certification returns 0. All points receiving 1 for certifications (darker regions) are at least ε-away from the other classes in (a)-(c), i.e. certification is sound. This property is violated in (d), e.g. points from dark red regions are not ε-away from the blue region in the zoomed-in view on the left, but preserved in (e). Namely, voting ensembles are soundness-preserving while cascading ensembles are not.
@@ -21,7 +21,7 @@ These figures are visualizing classification results of 2D points for constituen
 
 ## What is in this repository?
 ### Toy examples
-`example/2D.ipynb` and `example/TwoMoon.ipynb` generate two-dimensional toy examples on different ensemble strategies for visualization. 
+`example/TwoMoon.ipynb` generates a two-dimensional toy example on different ensemble strategies for visualization. 
 
 ### Models
 `/models/models_scaled/` and `/models/models_scaled_l2/`: models pre-trained by Wong et al. under cascade trainning strategy. 

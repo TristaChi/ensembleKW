@@ -1,5 +1,5 @@
 ################################################## MNIST ##################################################
-file=/longterm/chi/KwModels/MNIST
+file=/longterm/anonymous/KwModels/MNIST
 # file=./models/MNIST
 
 ####### mnist small exact 1 #######
@@ -74,7 +74,7 @@ python examples/mnist.py \
 
 
 ################################################## MNIST l2 ##################################################
-# file=/longterm/chi/KwModels/MNIST
+# file=/longterm/anonymous/KwModels/MNIST
 
 ####### mnist small158 #######
 # name=cas
@@ -118,7 +118,7 @@ python examples/mnist.py \
 
 
 ################################################## CIFAR l1 ##################################################
-file=/longterm/chi/KwModels/CIFAR
+file=/longterm/anonymous/KwModels/CIFAR
 # file=./models/CIFAR
 
 ####### cifar small2 #######
