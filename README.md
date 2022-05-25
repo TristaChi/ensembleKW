@@ -1,13 +1,13 @@
 # On the Perils of Cascading Robust Classifiers
 The repository supports the paper "On the Perils of Cascading Robust Classifiers."
-This repository evaluates the ensemble results under different strategies for the Kolter Wong models.
-See more about the Kolter Wong models here: https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e
+This repository evaluates the ensemble results under different strategies for the Kolter-Wong models.
+See more about the Kolter-Wong models here: https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e
 
 ## What is this repository used for?
 Cascading ensembles are a popular instance of black-box ensembles that appear to improve certified robust accuracies in practice. 
 However, we find that the robustness certifier used by a cascading ensemble is unsound. 
 The experimental support for cascading ensemble (unsound) and alternatively weighted voting ensemble (sound) is here. 
-For all ensemble strategies, we used pre-trained and self-trained Kolter Wong models.
+For all ensemble strategies, we used pre-trained and self-trained Kolter-Wong models.
 
 ## Visualization of Cascading Ensemble unsoundness
 
@@ -24,8 +24,8 @@ These figures are visualizing classification results of 2D points for constituen
 `example/TwoMoon.ipynb` generates a two-dimensional toy example on different ensemble strategies for visualization. 
 
 ### Models
-`/models/models_scaled/` and `/models/models_scaled_l2/`: models pre-trained by Wong et al. under cascade trainning strategy. 
-`/models/more_models/`: non-sequentially self trained models. 
+`/models/seq_trained/``: models pre-trained by Wong et al. under cascade training strategy. 
+`/models/non_seq_trained/`: models trained by use in a non-sequential manner. 
 
 ### Re-train the models
 
@@ -46,17 +46,17 @@ The computation of voting weights is done by using tensorflow. Therefore, you mi
 
 #### Scripts
 
-`train.sh` includes all the hyper-parameters and instructions needed for training a new model, given the model type and epsilon value.  
+`train.sh` includes all the hyper-parameters and instructions needed for non-sequential training of a new model, given the model type and epsilon value.  
 `example/mnist.py` and `example/cifar.py` are used for training a new model. 
 
 ### Model evaluation
 `eval.sh` includes all the hyper-parameters and instructions needed for evaluating a given model. 
 `example/evaluate.py` is used for evaluation. 
-It generates data files of (index, predict label, correct label, certified) on train and test dataset on a given model.
-The pre-generated evaluation results are saved in the `evalData` file. 
+For a given model evaluatued using either train or test dataset, it generates data files with one row for every sample in the dataset of the form  `(index , predicted label, correct label, is certified?)`
+The pre-generated evaluation results are saved in the `evalData` folder. 
 
 ### Ensemble
-`example/voting.py` is used for finding the ensemble results based on different ensemble strategies on the evaluated results of given models. 
+`example/voting.py` uses the evaluated results of the models in the `evalData' folder to calculate the ensemble results based on different ensemble strategies. 
 The available strategies include Cascading (unsound), Uniform Voting (sound), and Weighted Voting (sound). 
 
 ### More files
