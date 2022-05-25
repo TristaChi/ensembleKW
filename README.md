@@ -61,3 +61,6 @@ The available strategies include Cascading (unsound), Uniform Voting (sound), an
 
 ### More files
 All the other files used for training and evaluating the models come from the GitHub page of "Provably robust neural networks" by Wong et al. at https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e.
+
+## How to reproduce tables in the paper?
+To reproduce the results in the paper, one can start with models in the `models` directory or train the models according to `train.sh`. Then, use the `example/evaluate.py` file to generate data for the ensemble. To run the `example/evaluate.py`, one can use `eval.sh` for help. The generated data is also given in the directory `evalData`. Finally, we use `vote.sh` to run `example/voting.py` to generate ensemble results based on given model types and ensemble strategies. 
