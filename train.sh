@@ -1,161 +1,71 @@
-################################################## MNIST ##################################################
-file=/longterm/anonymous/KwModels/MNIST
-# file=./models/MNIST
+#!/bin/bash 
+PYTHONPATH=/nethome/ericwong/convex_adversarial.preview.nips
+# for L2 note that an L-infinity ball with radius eps
+# has approximately the same volume as an L2 ball with radius
+# sqrt(d/pi)*eps, where d is the number of dimensions. 
+# For MNIST this is 
+# sqrt(784/pi)*0.1=1.58
+# sqrt(784/pi)*0.3=4.74
+# and for cifar this is 
+# sqrt(1024/pi)*0.0348=0.628
+# sqrt(1024/pi)*0.139=2.51
 
-####### mnist small exact 1 #######
-name=cas
-python examples/mnist.py \
-    --epochs 60 \
-    --epsilon 0.1 \
-    --starting_epsilon 0.01 \
-    --schedule_length 20 \
-    --prefix ${file}/smallExact1/${name} \
-    --verbose 200 \
-    --norm_train l1 \
-    --norm_test l1 \
-    --cascade 6 \
-    --cuda_ids 0 \
-> ${file}/smallExact1/${name}.out
+# arguments that are universal across all experiments
+cuda_ids=0,1,2,3
+cascade=6
+epochs=60
+schedule_length=20
 
-####### mnist small exact 158 #######
+# L2 ball arguments
+norm_type=l1_median
+norm_eval=l1
+# norm_type=l2_normal
+# norm_eval=l2
 
-name=cas
-python examples/mnist.py \
-    --epochs 60 \
-    --epsilon 1.58 \
-    --starting_epsilon 0.01 \
-    --schedule_length 20 \
-    --prefix ${file}/smallExact158/${name} \
-    --verbose 200 \
-    --norm_train l2 \
-    --norm_test l2 \
-    --cascade 6 \
-    --cuda_ids 0 \
-> ${file}/smallExact1/${name}.out
+# MNIST parameters
+prefix="tmp/mnist"
+starting_epsilon=0.01
+parameters="--epochs ${epochs} --starting_epsilon ${starting_epsilon} --schedule_length ${schedule_length} --cascade ${cascade} --prefix ${prefix} --verbose 200 --cuda_ids ${cuda_ids}"
 
-####### mnist small1, small3 #######
-# name=cas
-# eps=3
-# python examples/mnist.py \
-#     --epochs 60 \
-#     --epsilon 0.${eps} \
-#     --starting_epsilon 0.01 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/small${eps}/${name} \
-#     --verbose 100 \
-#     --norm_train l1_median \
-#     --norm_test l1 \
-#     --cascade 6 \
-#     --cuda_ids 2 \
-#     --print_log False \
-# > ${file}/small${eps}/${name}.out
+# [pick an epsilon]
+# linf ball epsilons
+eps=0.1
+# eps=0.3
+# l2 ball epsilons
+# eps=1.58
 
+# small, exact 
+python examples/mnist.py --epsilon ${eps} --norm_train ${norm_eval} --norm_test ${norm_eval} ${parameters}
 
-####### mnist large1 #######
-# name=cas
-# nohup \
-# python examples/mnist.py \
-# 	--model large \
-#     --epochs 60 \
-#     --epsilon 0.1 \
-#     --starting_epsilon 0.01 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/large1/${name} \
-#     --verbose 200 \
-#     --norm_train l1_median \
-#     --norm_test l1 \
-#     --cascade 6 \
-#     --test_batch_size 4 \
-#     --cuda_ids 1 \
-#     --print_log False \
-# > ${file}/large1/${name}.log 2>&1 &
+# all remaining experiments use an approximation for training with 50 projections
+parameters="--proj 50 --norm_train ${norm_type} ${parameters}"
 
+# small 
+# python examples/mnist.py --epsilon ${eps} --norm_test ${norm_eval} ${parameters} 
 
-################################################## MNIST l2 ##################################################
-# file=/longterm/anonymous/KwModels/MNIST
+# large
+# python examples/mnist.py --epsilon ${eps} --norm_test ${norm_eval} --test_batch_size 8 --model large ${parameters}
 
-####### mnist small158 #######
-# name=cas
-# nohup \
-# python examples/mnist.py \
-#     --epochs 60 \
-#     --epsilon 1.58 \
-#     --starting_epsilon 0.01 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/small158/${name} \
-#     --verbose 100 \
-#     --norm_train l2_normal \
-#     --norm_test l2 \
-#     --cascade 6 \
-#     --cuda_ids 2 \
-#     --print_log False \
-# > ${file}/small158/${name}.out 2>&1 &
+# CIFAR parameters
+prefix="tmp/cifar"
+starting_epsilon=0.001
+parameters="--epochs ${epochs} --starting_epsilon ${starting_epsilon} --schedule_length ${schedule_length} --cascade ${cascade} --prefix ${prefix} --verbose 200 --cuda_ids ${cuda_ids}"
+parameters="--proj 50 --norm_train ${norm_type} ${parameters}"
 
+# [pick an epsilon]
+# linf ball epsilons
+eps=0.0348
+# eps=0.139
+# l2 ball epsilons
+# eps=0.157
 
-####### mnist large1 #######
-# name=cas
-# nohup \
-# python examples/mnist.py \
-# 	  --model large \
-#     --epochs 60 \
-#     --epsilon 0.1 \
-#     --starting_epsilon 0.01 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/large1/${name} \
-#     --verbose 200 \
-#     --norm_train l1_median \
-#     --norm_test l1 \
-#     --cascade 6 \
-#     --test_batch_size 4 \
-#     --cuda_ids 1 \
-#     --print_log False \
-# > ${file}/large1/${name}.log 2>&1 &
+# small
+# python examples/cifar.py --epsilon ${eps} --norm_test ${norm_eval} --test_batch_size 25 ${parameters}
 
+# large
+# python examples/cifar.py --epsilon ${eps} --norm_test ${norm_eval} --test_batch_size 8 --model large ${parameters}
 
-
-################################################## CIFAR l1 ##################################################
-file=/longterm/anonymous/KwModels/CIFAR
-# file=./models/CIFAR
-
-####### cifar small2 #######
-# name=cas
-# python examples/cifar.py \
-#     --epochs 60 \
-#     --epsilon 0.0348 \
-#     --starting_epsilon 0.001 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/small2/${name} \
-#     --verbose 200 \
-#     --norm_train l1_median \
-#     --norm_test l1 \
-#     --cascade 6 \
-#     --test_batch_size 25 \
-#     --cuda_ids 2 \
-#     --print_log False \
-# > ${file}/small2/${name}.out 
-
-
-####### cifar large2 #######
-# name=cas
-# nohup \
-# python examples/cifar.py \
-#     --epochs 60 \
-#     --epsilon 0.139 \
-#     --test_batch_size 4 \
-#     --model large \
-#     --starting_epsilon 0.001 \
-#     --schedule_length 20 \
-#     --proj 50 \
-#     --prefix ${file}/large2/${name} \
-#     --verbose 200 \
-#     --norm_train l1_median \
-#     --norm_test l1 \
-#     --cascade 6 \
-#     --cuda_ids 0 \
-#     --print_log False \
-# > ${file}/large2/${name}.out 2>&1 &
+# resnet
+# the only model where we defer true (non estimated) test statistics 
+# to after training to save time
+# python examples/cifar.py --epsilon ${eps} --norm_test ${norm_type} --model resnet ${parameters}
