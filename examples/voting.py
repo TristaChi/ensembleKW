@@ -3,7 +3,6 @@ import argparse
 import csv
 import tensorflow as tf
 
-from dbify import dbify
 from scriptify import scriptify
 
 
@@ -218,7 +217,6 @@ def np_onehot(vector, num_classes=None):
 if __name__ == "__main__":
 
     @scriptify
-    @dbify('gloro', 'ensemble')
     def script(
             model_type="mnist_large_0_1",  # mnist_large_0_1, cifar_small_2px
             root="/home/anonymous/NNRobustness/ensembleKW/evalData/l_inf/",

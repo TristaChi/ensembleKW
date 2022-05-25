@@ -28,6 +28,24 @@ These figures are visualizing classification results of 2D points for constituen
 `/models/more_models/`: non-sequentially self trained models. 
 
 ### Re-train the models
+
+#### Pre-requisite
+
+We use the following docker image from [NVIDIA](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch) to train the model.
+```
+nvcr.io/nvidia/pytorch:21.02-py3
+```
+
+Some extra packages that do not come with the docker can be installed with `pip`. 
+
+```
+pip install scriptify
+```
+
+The computation of voting weights is done by using tensorflow. Therefore, you might need Tensorflow 2.x to run it. We will provide a pytorch implementation in the future. 
+
+#### Scripts
+
 `train.sh` includes all the hyper-parameters and instructions needed for training a new model, given the model type and epsilon value.  
 `example/mnist.py` and `example/cifar.py` are used for training a new model. 
 
