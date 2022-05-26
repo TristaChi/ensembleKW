@@ -25,7 +25,7 @@ These figures are visualizing classification results of 2D points for constituen
 
 ### Models
 `/models/seq_trained/``: models pre-trained by Wong et al. under cascade training strategy. 
-`/models/non_seq_trained/`: models trained by use in a non-sequential manner. 
+`/models/non_seq_trained/`: models trained by us in a non-sequential manner. 
 
 
 ### Scripts
