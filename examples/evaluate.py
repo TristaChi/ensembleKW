@@ -98,14 +98,20 @@ if __name__ == "__main__":
         m = select_model(args.model)
         m.load_state_dict(sd)
         models.append(m)
-        print("number of models: ",len(models))
+    
+    num_models = len(models)
+    print("number of models: ", num_models)
     
     for model in models:
         model.eval()
 
     for j,model in enumerate(models):
-        train_log = open(args.output+str(j)+"_train", "w")
-        test_log = open(args.output+str(j)+"_test", "w")
+        if num_models == 1: #implies that we are evaluating non-sequentially trained models one-by-one
+            train_log = open(args.output+"_train", "w")
+            test_log = open(args.output+"_test", "w")
+        else:        
+            train_log = open(args.output+str(j)+"_train", "w")
+            test_log = open(args.output+str(j)+"_test", "w")
 
         err = evaluate_robustness(train_loader, model,
             args.epsilon, 0, train_log, args.verbose,

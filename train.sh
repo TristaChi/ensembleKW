@@ -1,5 +1,5 @@
+file=<path_to_models>
 ################################################## MNIST l_inf ##################################################
-file=[dir_to_save_models]
 
 ####### mnist small exact 1 #######
 name=smallExact_1
@@ -15,6 +15,8 @@ python examples/mnist.py \
 > ${file}/${name}.out
 
 ####### mnist small, large, eps=1,3 #######
+# model_type=small or model_type=large
+# eps=1 or eps=3
 model_type=small
 eps=3
 python examples/mnist.py \
@@ -47,6 +49,7 @@ python examples/mnist.py \
 
 ####### mnist small, large #######
 model_type=small
+# model_type=small or model_type=large
 python examples/mnist.py \
     --epochs 60 \
     --model ${model_type} \
@@ -62,9 +65,9 @@ python examples/mnist.py \
 > ${file}/${model_type}_158.out
 
 ################################################## CIFAR l_inf ##################################################
-file=[dir_to_save_models]
-
 ####### cifar small, large, epspx=2,8 #######
+# model_type=small or model_type=large
+# epspx=2 or epspx=8
 model_type=small
 epspx=2
 eps=0.0348 # epspx=2
@@ -86,6 +89,7 @@ python examples/cifar.py \
 
 ################################################## CIFAR l_2 ##################################################
 ####### cifar small, large, epspx=36 #######
+# model_type=small or model_type=large
 model_type=small
 epspx=36
 eps=0.157

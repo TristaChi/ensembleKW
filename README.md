@@ -1,12 +1,12 @@
 # On the Perils of Cascading Robust Classifiers
 The repository supports the paper "On the Perils of Cascading Robust Classifiers."
-This repository evaluates the ensemble results under different strategies for the Kolter-Wong models.
+This repository evaluates ensembles using different strategie (Cascading, Weighted Voting, Uniform Voting) with Kolter-Wong constituent models.
 See more about the Kolter-Wong models here: https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e
 
 ## What is this repository used for?
 Cascading ensembles are a popular instance of black-box ensembles that appear to improve certified robust accuracies in practice. 
 However, we find that the robustness certifier used by a cascading ensemble is unsound. 
-The experimental support for cascading ensemble (unsound) and alternatively weighted voting ensemble (sound) is here. 
+This repository provides experimental support for cascading ensembles (unsound),  weighted voting ensembles (sound), and uniform weighted ensembles (sound). 
 For all ensemble strategies, we used pre-trained and self-trained Kolter-Wong models.
 
 ## Visualization of Cascading Ensemble unsoundness
@@ -27,9 +27,33 @@ These figures are visualizing classification results of 2D points for constituen
 `/models/seq_trained/``: models pre-trained by Wong et al. under cascade training strategy. 
 `/models/non_seq_trained/`: models trained by use in a non-sequential manner. 
 
-### Re-train the models
 
-#### Pre-requisite
+### Scripts
+
+#### Training constituent models
+
+`train.sh` includes all the hyper-parameters and instructions needed for non-sequential training of a new constituent model, given the model type and epsilon value.  
+Interntally, `train.sh` uses `example/mnist.py` and `example/cifar.py` for training new models. 
+
+#### Evaluating constituent models
+`eval.sh` includes all the hyper-parameters and instructions needed for evaluating a given constituent model. 
+Internally, `eval.sh` uses `example/evaluate.py` for evaluating models. 
+For a given constituent model evaluatued using either train or test dataset, it generates data files with one row for every sample in the dataset of the form  `(index , predicted label, correct label, is certified?)`
+The pre-generated evaluation results are saved in the `evalData` folder. 
+
+#### Evaluating ensembles
+`vote.sh` includes the instructions for evaluating ensembles. Internally, `vote.sh` uses `example/voting.py` that  uses the evaluated results of the models in the `evalData' folder to calculate the ensemble results based on different ensemble strategies.
+The available strategies include Cascading (unsound), Uniform Voting (sound), and Weighted Voting (sound). 
+The algorithm for learning the weights of the weighted voting ensemble is implemented in `example/voting.py`.
+
+#### Other files
+All the other files used for training and evaluating the models come from the GitHub page of "Provably robust neural networks" by Wong et al. at https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e.
+
+
+## How to reproduce the tables in the paper?
+To reproduce the results in the paper, start with the models in the `models` directory or train new constituent models using `train.sh`. Then, use `eval.sh` to generate the results of evaluating each  constituent model in the ensemble. The generated evaluation data is already available in the directory `evalData`. Finally, use `vote.sh` to generate ensemble results for different  model types and ensembling strategies. 
+
+## Pre-requisites
 
 We use the following docker image from [NVIDIA](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch) to train the model.
 ```
@@ -42,25 +66,4 @@ Some extra packages that do not come with the docker can be installed with `pip`
 pip install scriptify
 ```
 
-The computation of voting weights is done by using tensorflow. Therefore, you might need Tensorflow 2.x to run it. We will provide a pytorch implementation in the future. 
-
-#### Scripts
-
-`train.sh` includes all the hyper-parameters and instructions needed for non-sequential training of a new model, given the model type and epsilon value.  
-`example/mnist.py` and `example/cifar.py` are used for training a new model. 
-
-### Model evaluation
-`eval.sh` includes all the hyper-parameters and instructions needed for evaluating a given model. 
-`example/evaluate.py` is used for evaluation. 
-For a given model evaluatued using either train or test dataset, it generates data files with one row for every sample in the dataset of the form  `(index , predicted label, correct label, is certified?)`
-The pre-generated evaluation results are saved in the `evalData` folder. 
-
-### Ensemble
-`example/voting.py` uses the evaluated results of the models in the `evalData' folder to calculate the ensemble results based on different ensemble strategies. 
-The available strategies include Cascading (unsound), Uniform Voting (sound), and Weighted Voting (sound). 
-
-### More files
-All the other files used for training and evaluating the models come from the GitHub page of "Provably robust neural networks" by Wong et al. at https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e.
-
-## How to reproduce tables in the paper?
-To reproduce the results in the paper, one can start with models in the `models` directory or train the models according to `train.sh`. Then, use the `example/evaluate.py` file to generate data for the ensemble. To run the `example/evaluate.py`, one can use `eval.sh` for help. The generated data is also given in the directory `evalData`. Finally, we use `vote.sh` to run `example/voting.py` to generate ensemble results based on given model types and ensemble strategies. 
+The computation of voting weights needs TensorFlow 2.x. We will provide a PyTorch implementation in the future. 
