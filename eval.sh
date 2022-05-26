@@ -18,8 +18,6 @@ python examples/evaluate.py \
 
 # mnist small exact, non-sequentially trained
 # run with id=1 and id=2 to evaluate two constituent models
-cp models
-
 eps=1
 model_type=small_exact
 norm=l1
@@ -67,7 +65,7 @@ eps=1
 model_type=small
 norm=l1
 id=1
-model="models/non_seq_trained/l_inf/more_mnist${model_type}_0_${eps}_${id}.pth"
+model="models/non_seq_trained/l_inf/more_mnist_${model_type}_0_${eps}_${id}.pth"
 output="evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
