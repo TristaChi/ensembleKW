@@ -192,7 +192,7 @@ python examples/evaluate.py \
 # epspx=2 or eps=8
 # run with id=1 and id=2 to evaluate two constituent models
 epspx=2
-model_type=large
+model_type=small
 norm=l1
 model="models/non_seq_trained/l_inf/more_cifar_${model_type}_${epspx}px_${id}.pth"
 output="evalData/non_seq_trained/l_inf/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_${id}"
@@ -237,7 +237,7 @@ python examples/evaluate.py \
 # cifar small, non-sequentially trained
 # run with id=1 and id=2 to evaluate two constituent models
 epspx=36
-model_type=large
+model_type=small
 norm=l2
 model="models/non_seq_trained/l2/more_cifar_${model_type}_${epspx}px_${id}.pth"
 output="evalData/non_seq_trained/l_2/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_${id}"
