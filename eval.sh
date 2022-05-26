@@ -18,11 +18,13 @@ python examples/evaluate.py \
 
 # mnist small exact, non-sequentially trained
 # run with id=1 and id=2 to evaluate two constituent models
+cp models
+
 eps=1
 model_type=small_exact
 norm=l1
 id=1
-model="models/non_seq_trained/l_inf/more_mnist${model_type}${eps}_${id}.pth"
+model="models/non_seq_trained/l_inf/more_mnist_${model_type}_0_${eps}_${id}.pth"
 output="evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
@@ -34,6 +36,9 @@ python examples/evaluate.py \
     --verbose 100 \
     --cuda_ids 1 \
 > ${output}.log 
+
+cp evalData/seq_trained/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_0_train evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_0_train
+cp evalData/seq_trained/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_0_test evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_0_test
 
 # mnist small, large, eps = 1,3, sequentially trained
 # model_type=small or model_type=large
@@ -62,7 +67,7 @@ eps=1
 model_type=small
 norm=l1
 id=1
-model="models/non_seq_trained/l_inf/more_mnist${model_type}${eps}_${id}.pth"
+model="models/non_seq_trained/l_inf/more_mnist${model_type}_0_${eps}_${id}.pth"
 output="evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
@@ -75,6 +80,9 @@ python examples/evaluate.py \
     --verbose 100 \
     --cuda_ids 1 \
 > ${output}.log 
+
+cp evalData/seq_trained/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_0_train evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_0_train
+cp evalData/seq_trained/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_0_test evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_0_test
 
 ############################################## mnist l2 ##################################################
 
@@ -101,8 +109,8 @@ eps=158
 model_type=small_exact
 norm=l2
 id=1
-model="models/seq_trained/l_2/more_mnist_${model_type}_${id}.pth"
-output="evalData/seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_${id}"
+model="models/non_seq_trained/l_2/more_mnist_${model_type}_${id}.pth"
+output="evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
     --epsilon  1.58 \
@@ -113,6 +121,9 @@ python examples/evaluate.py \
     --verbose 100 \
     --cuda_ids 1 \
 > ${output}.log 
+
+cp evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_0_train evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_0_train
+cp evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_0_test evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_0_test
 
 # mnist small, large, sequentially trained
 # model_type=small or model_type=large
@@ -139,8 +150,8 @@ eps=158
 model_type=small
 norm=l1
 id=1
-model="models/seq_trained/l_2/more_mnist_${model_type}_${id}.pth"
-output="evalData/seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_${id}"
+model="models/non_seq_trained/l_2/more_mnist_${model_type}_${id}.pth"
+output="evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
     --epsilon  1.58 \
@@ -152,6 +163,9 @@ python examples/evaluate.py \
     --verbose 100 \
     --cuda_ids 1 \
 > ${output}.log 
+
+cp evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_0_train evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_0_train
+cp evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_0_test evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_0_test
 
 ############################################## CIFAR linf ##################################################
 # cifar small, large, epspx=2,8, sequentially trained
@@ -176,14 +190,39 @@ python examples/evaluate.py \
     --cuda_ids 2 \
 > ${output}.log 
 
+# cifar small epspx=2,8, non-sequentially trained
+# epspx=2 or eps=8
+# run with id=1 and id=2 to evaluate two constituent models
+epspx=2
+model_type=large
+norm=l1
+model="models/non_seq_trained/l_inf/more_cifar_${model_type}_${epspx}px_${id}.pth"
+output="evalData/non_seq_trained/l_inf/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_${id}"
+eps=0.0348 # epspx=2
+# eps=0.139 # epspx=8
+python examples/evaluate.py \
+    --model ${model_type} \
+    --epsilon  ${eps} \
+    --proj 50 \
+    --norm ${norm} \
+    --dataset cifar \
+    --load ${model} \
+    --output ${output} \
+    --verbose 100 \
+    --cuda_ids 2 \
+> ${output}.log 
+
+cp evalData/seq_trained/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_train evalData/non_seq_trained/l_inf/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_train
+cp evalData/seq_trained/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_test evalData/non_seq_trained/l_inf/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_test
+
 ############################################## CIFAR l2 ##################################################
-# cifar small, large
+# cifar small, large, sequentially trained
 # model_type=small or model_type=large
 epspx=36
 model_type=large
 norm=l2
-model="models/models_scaled_l2/cifar_${model_type}_${epspx}px.pth"
-output="evalData/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+model="models/seq_trained/l_2/cifar_${model_type}_${epspx}px.pth"
+output="evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
 eps=0.157 # l2
 python examples/evaluate.py \
     --model ${model_type} \
@@ -197,5 +236,26 @@ python examples/evaluate.py \
     --cuda_ids 2 \
 > ${output}.log 
 
+# cifar small, non-sequentially trained
+# run with id=1 and id=2 to evaluate two constituent models
+epspx=36
+model_type=large
+norm=l2
+model="models/non_seq_trained/l2/more_cifar_${model_type}_${epspx}px_${id}.pth"
+output="evalData/non_seq_trained/l_2/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_${id}"
+eps=0.157 # l2
+python examples/evaluate.py \
+    --model ${model_type} \
+    --epsilon  ${eps} \
+    --proj 50 \
+    --norm ${norm} \
+    --dataset cifar \
+    --load ${model} \
+    --output ${output} \
+    --verbose 100 \
+    --cuda_ids 2 \
+> ${output}.log 
 
+cp evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_train evalData/non_seq_trained/l_2/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_train
+cp evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_test evalData/non_seq_trained/l_2/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_test
 
