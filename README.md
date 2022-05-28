@@ -38,11 +38,11 @@ Interntally, `train.sh` uses `example/mnist.py` and `example/cifar.py` for train
 #### Evaluating constituent models
 `eval.sh` includes all the hyper-parameters and instructions needed for evaluating a given constituent model. 
 Internally, `eval.sh` uses `example/evaluate.py` for evaluating models. 
-For a given constituent model evaluatued using either train or test dataset, it generates data files with one row for every sample in the dataset of the form  `(index , predicted label, correct label, is certified?)`
+For a given constituent model evaluatued using either train or test dataset, it generates data files with one row for every sample in the dataset of the form  `(index , predicted label, correct label, is certified?)`.
 The pre-generated evaluation results are saved in the `evalData` folder. 
 
 #### Evaluating ensembles
-`vote.sh` includes the instructions for evaluating ensembles. Internally, `vote.sh` uses `example/voting.py` that  uses the evaluated results of the models in the `evalData' folder to calculate the ensemble results based on different ensemble strategies.
+`vote.sh` includes the instructions for evaluating ensembles. Internally, `vote.sh` uses `example/voting.py` that  uses the evaluated results of the models in the `evalData` folder to calculate the ensemble results based on different ensemble strategies.
 The available strategies include Cascading (unsound), Uniform Voting (sound), and Weighted Voting (sound). 
 The algorithm for learning the weights of the weighted voting ensemble is implemented in `example/voting.py`.
 
