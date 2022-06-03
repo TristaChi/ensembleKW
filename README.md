@@ -24,7 +24,7 @@ These figures are visualizing classification results of 2D points for constituen
 `example/TwoMoon.ipynb` generates a two-dimensional toy example on different ensemble strategies for visualization. 
 
 ### Models
-`/models/seq_trained/``: models pre-trained by Wong et al. under cascade training strategy. 
+`/models/seq_trained/`: models pre-trained by Wong et al. under cascade training strategy. 
 `/models/non_seq_trained/`: models trained by us in a non-sequential manner. 
 
 
@@ -67,3 +67,6 @@ pip install scriptify
 ```
 
 The computation of voting weights needs TensorFlow 2.x. We will provide a PyTorch implementation in the future. 
+
+## Contributors
+Chi Zhang, Zifan Wang, and Ravi Mangal
