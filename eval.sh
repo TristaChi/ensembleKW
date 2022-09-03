@@ -7,7 +7,7 @@ model="models/seq_trained/l_inf/mnist_${model_type}_0_${eps}.pth"
 output="evalData/seq_trained/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_"
 python examples/evaluate.py \
     --model ${model_type} \
-    --epsilon  ${eps} \
+    --epsilon  0.${eps} \
     --norm ${norm} \
     --dataset mnist \
     --load ${model} \
@@ -26,7 +26,7 @@ model="models/non_seq_trained/l_inf/more_mnist_${model_type}_0_${eps}_${id}.pth"
 output="evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
-    --epsilon  ${eps} \
+    --epsilon  0.${eps} \
     --norm ${norm} \
     --dataset mnist \
     --load ${model} \
@@ -48,7 +48,7 @@ model="models/seq_trained/l_inf/mnist_${model_type}_0_${eps}.pth"
 output="evalData/seq_trained/l_inf/mnist_${model_type}_0_${eps}/mnist_${model_type}_0_${eps}_"
 python examples/evaluate.py \
     --model ${model_type} \
-    --epsilon  ${eps} \
+    --epsilon  0.${eps} \
     --proj 50 \
     --norm ${norm} \
     --dataset mnist \
@@ -69,7 +69,7 @@ model="models/non_seq_trained/l_inf/more_mnist_${model_type}_0_${eps}_${id}.pth"
 output="evalData/non_seq_trained/l_inf/mnist_${model_type}_0_${eps}/more_mnist_${model_type}_0_${eps}_${id}"
 python examples/evaluate.py \
     --model ${model_type} \
-    --epsilon  ${eps} \
+    --epsilon  0.${eps} \
     --proj 50 \
     --norm ${norm} \
     --dataset mnist \
@@ -168,7 +168,7 @@ cp evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_0_test evalD
 ############################################## CIFAR linf ##################################################
 # cifar small, large, epspx=2,8, sequentially trained
 # model_type=small or model_type=large
-# epspx=2 or eps=8
+# epspx=2 or epspx=8
 epspx=2
 model_type=large
 norm=l1
@@ -189,7 +189,7 @@ python examples/evaluate.py \
 > ${output}.log 
 
 # cifar small epspx=2,8, non-sequentially trained
-# epspx=2 or eps=8
+# epspx=2 or epspx=8
 # run with id=1 and id=2 to evaluate two constituent models
 epspx=2
 model_type=small

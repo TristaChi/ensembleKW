@@ -40,7 +40,24 @@ def select_cifar_model(m):
         model = pblm.cifar_model().cuda() 
     return model
 
-def eval_cascade(models, epsilon, X, y, **kwargs): 
+def softmax_cross_entropy_with_softtarget(input, target, reduction='mean'):
+    """
+    :param input: (batch, *)
+    :param target: (batch, *) same shape as input, each item must be a valid distribution: target[i, :].sum() == 1.
+    """
+    logprobs = torch.nn.functional.log_softmax(input.view(input.shape[0], -1), dim=1)
+    batchloss = - torch.sum(target.view(target.shape[0], -1) * logprobs, dim=1)
+    if reduction == 'none':
+        return batchloss
+    elif reduction == 'mean':
+        return torch.mean(batchloss)
+    elif reduction == 'sum':
+        return torch.sum(batchloss)
+    else:
+        raise NotImplementedError('Unsupported reduction mode.')
+        
+def eval_cascade(models, epsilon, X, y, **kwargs):
+    torch.set_grad_enabled(False)
     I = torch.arange(X.size(0)).type_as(y.data)
 
     # map from modelid to indices of elements in X where model <modelid> 
@@ -51,7 +68,10 @@ def eval_cascade(models, epsilon, X, y, **kwargs):
     # is used to make the ensemble prediction and the predictions are accurate & robust
     acc_certified_modelid_idx_map = {}
 
-    for j,model in enumerate(models): 
+    for j,model in enumerate(models):
+        
+        # print("attack_ensemble:56: ", float(torch.cuda.memory_allocated())/(1000*1000*1000))
+        # print("attack_ensemble:56: ", float(torch.cuda.max_memory_allocated())/(1000*1000*1000))
 
         out = model(X)
 
@@ -59,27 +79,30 @@ def eval_cascade(models, epsilon, X, y, **kwargs):
                                      out.max(1)[1],
                                      size_average=False, **kwargs)
 
+
         certified = ~uncertified
-        
+
         if certified.sum() == 0: 
             pass
             # print("Warning: Cascade stage {} has no certified values.".format(j+1))
         else: 
-            certified_modelid_idx_map[j] = I[certified.nonzero()[:,0]].toList
-
+            certified_modelid_idx_map[j] = I[certified.nonzero()[:,0]].tolist()
             acc_certified = torch.logical_and(certified, out.max(1)[1]==y)
-
-            acc_certified_modelid_idx_map[j] = I[acc_certified.nonzero()[:,0]].toList    
+            acc_certified_modelid_idx_map[j] = I[acc_certified.nonzero()[:,0]].tolist()
 
             # reduce data set to uncertified examples
             if uncertified.sum() > 0: 
-                X = X[Variable(uncertified.nonzero()[:,0])]
-                y = y[Variable(uncertified.nonzero()[:,0])]
+                X = X[uncertified.nonzero()[:,0]]
+                y = y[uncertified.nonzero()[:,0]]
                 I = I[uncertified.nonzero()[:,0]]
-            else: 
+            else:
+                torch.cuda.empty_cache()
+                torch.set_grad_enabled(True)
                 return certified_modelid_idx_map, acc_certified_modelid_idx_map
+        
         ####################################################################
-
+    torch.cuda.empty_cache()
+    torch.set_grad_enabled(True)
     return certified_modelid_idx_map, acc_certified_modelid_idx_map    
 
 def _surrogate_attack(models, epsilon, X, y, modelid, **kwargs):
@@ -107,25 +130,24 @@ def _direct_attack(models, epsilon, X, y, modelid, **kwargs):
             opt_pgd = optim.Adam([X_pgd], lr=1e-3)
 
 
-            loss_pred = -nn.CrossEntropyLoss()(model(X_pgd), Variable(y_candidates)) # probably don't need this term
-            loss_cert, _ = robust_loss(model, epsilon, Variable(X_pgd), Variable(y_pred), **kwargs)
-            loss_nocert = torch.zeros(loss_pred.size).type_as(loss_pred.data)
+            loss_pred = -nn.CrossEntropyLoss(reduction='none')(model(X_pgd), Variable(y_candidates)) # probably don't need this term
+            loss_cert, _ = robust_loss(model, epsilon, Variable(X_pgd), Variable(y_pred), size_average=False, **kwargs)
+            loss_nocert = torch.zeros(loss_pred.size()).type_as(loss_pred.data)
             for k in range(j):
-                if k == modelid:
-                    continue
                 f = RobustBounds(models[k], epsilon, **kwargs)(Variable(X_pgd), Variable(y_pred))
-                loss_nocert += nn.CrossEntropyLoss(reduction='none')(f, (torch.ones(f.size).type_as(f.data)) / float(f.size(1)))
+                unif_dist = torch.ones(f.size()).type_as(f.data) / float(f.size(1))
+                loss_nocert += softmax_cross_entropy_with_softtarget(f, unif_dist, reduction='none')
 
             loss = loss_pred + loss_cert + loss_nocert
-            loss.backward()
+            loss.mean().backward()
 
             #l_inf PGD
             eta = 0.01*X_pgd.grad.data.sign()
             X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
             
             # adjust to be within [-epsilon, epsilon]
-            eta = torch.clamp(X_pgd.data - X, -epsilon, epsilon)
-            X_pgd.data = X + eta
+            eta = torch.clamp(X_pgd.data - X_candidates, -epsilon, epsilon)
+            X_pgd.data = X_candidates + eta
             X_pgd.data = torch.clamp(X_pgd.data, 0, 1)
         
             #TODO: l_2 PGD
@@ -135,16 +157,17 @@ def _direct_attack(models, epsilon, X, y, modelid, **kwargs):
         for _, idxs in acc_certified_modelid_idx_map.items():
             acc_certified_idxs += idxs
         
-        I_succ_candidates = I_candidates[torch.tensor(acc_certified_idxs)]
-        
-        success_ids += I_succ_candidates.toList
-        x_attack += X_pgd[torch.tensor(acc_certified_idxs)].toList
+        if acc_certified_idxs:
+            I_succ_candidates = I_candidates[torch.tensor(acc_certified_idxs)]
+            
+            success_ids += I_succ_candidates.toList
+            x_attack += X_pgd[torch.tensor(acc_certified_idxs)].tolist()
 
-        combined = torch.cat((I, I_succ_candidates))
-        uniques, counts = combined.unique(return_counts=True)
-        I = uniques[counts == 1]
-        X = X[I]
-        y = y[I]
+            combined = torch.cat((I, I_succ_candidates))
+            uniques, counts = combined.unique(return_counts=True)
+            I = uniques[counts == 1]
+            X = X[I]
+            y = y[I]
 
     return x_attack, success_ids
 
@@ -160,7 +183,7 @@ def attack(loader, models, epsilon, log, verbose, **kwargs):
             y = y.squeeze(1)
 
         #extract subset of dataset where ensemble is accurate and robust. Also, get id of constituent model used to make the prediction
-        certified_modelid_idx_map, acc_certified_modelid_idx_map = eval_cascade(models, epsilon, Variable(X), Variable(y), **kwargs)
+        certified_modelid_idx_map, acc_certified_modelid_idx_map = eval_cascade(models, epsilon, X, y, **kwargs)
         for modelid, idxs in acc_certified_modelid_idx_map.items():
             X_curr = X[torch.tensor(idxs)]
             y_curr = y[torch.tensor(idxs)]
@@ -185,11 +208,12 @@ if __name__ == "__main__":
     print("saving file to {}".format(args.output))
     setproctitle.setproctitle(args.output)
 
+    batch_size = 8
     if args.dataset == "mnist":
-        train_loader, test_loader = pblm.mnist_loaders(1)
+        train_loader, test_loader = pblm.mnist_loaders(batch_size)
         select_model = select_mnist_model
     elif args.dataset == "cifar":
-        train_loader, test_loader = pblm.cifar_loaders(1)
+        train_loader, test_loader = pblm.cifar_loaders(batch_size)
         select_model = select_cifar_model
 
     d = torch.load(args.load)
@@ -209,14 +233,8 @@ if __name__ == "__main__":
     train_log = open(args.output+"_train_attack", "w")
     test_log = open(args.output+"_test_attack", "w")
 
-    if train_loader is None: 
-        print('No robust train examples, terminating')
-    else:
-        attack(train_loader, models, args.epsilon, train_log, args.verbose,
+    attack(train_loader, models, args.epsilon, train_log, args.verbose,
         norm_type=args.norm, bounded_input=False, proj=args.proj)    
     
-    if test_loader is None: 
-        print('No robust test examples, terminating')
-    else:
-        attack(train_loader, models, args.epsilon, train_log, args.verbose,
+    attack(test_loader, models, args.epsilon, train_log, args.verbose,
         norm_type=args.norm, bounded_input=False, proj=args.proj)
