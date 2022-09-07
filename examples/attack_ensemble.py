@@ -102,11 +102,14 @@ def eval_cascade(config, models, X, y):
             pass
             # print("Warning: Cascade stage {} has no certified values.".format(j+1))
         else:
-            certified_modelid_idx_map[j] = I[certified.nonzero()[:,
-                                                                 0]].tolist()
+            value = I[certified.nonzero()[:, 0]].tolist()
+            if len(value) > 0:
+                certified_modelid_idx_map[j] = value
+
             acc_certified = torch.logical_and(certified, out.max(1)[1] == y)
-            acc_certified_modelid_idx_map[j] = I[acc_certified.nonzero()
-                                                 [:, 0]].tolist()
+            value = I[acc_certified.nonzero()[:, 0]].tolist()
+            if len(value) > 0:
+                acc_certified_modelid_idx_map[j] = value
 
             # reduce data set to uncertified examples
             if uncertified.sum() > 0:
@@ -121,6 +124,7 @@ def eval_cascade(config, models, X, y):
         ####################################################################
     torch.cuda.empty_cache()
     torch.set_grad_enabled(True)
+
     return certified_modelid_idx_map, acc_certified_modelid_idx_map
 
 
@@ -162,6 +166,10 @@ def _direct_attack(config, models, X, y, modelid):
         # certifier, it is impossible to find an adversarial point within the eps-ball
         # that outputs a different label with cetificate.
         candidates = (y_pred != y).nonzero()[:, 0]
+
+        # If there is no candidate, we skip this model j.
+        if len(candidates) < 1:
+            continue
 
         I_candidates = I[candidates]
         X_candidates = X[candidates]
@@ -241,7 +249,6 @@ def attack(config, loader, models, log):
     dataset_size = 0
     total_num_robust_accurate = 0
     total_num_adv_robust_accurate = 0
-    total_success_ids = 0
 
     pbar = enumerate(loader)
 
@@ -257,16 +264,25 @@ def attack(config, loader, models, log):
         if y.dim() == 2:
             y = y.squeeze(1)
 
-        # Extract a subset of dataset where ensemble is accurate and robust.
+        # Extract a subset of batch where ensemble is accurate and robust.
         # Also, get the id of constituent model used to make the prediction
-        certified_modelid_idx_map, acc_certified_modelid_idx_map = eval_cascade(
+        # acc_certified_modelid_idx_map is a dictionary mapping from 
+        # model_id to the list of batch-leve indixces of points it certifies.  
+        _, acc_certified_modelid_idx_map = eval_cascade(
             config, models, X, y)
+        
+        # acc_certified_modelid_idx_map is a empty dictionary,
+        # which means no point is both accurate and robust. 
+        if len(acc_certified_modelid_idx_map.keys()) == 0:
+            continue
 
         num_robust_accurate = 0
         num_deny_of_service = 0
         for modelid, idxs in acc_certified_modelid_idx_map.items():
+
             X_curr = X[torch.tensor(idxs)]
             y_curr = y[torch.tensor(idxs)]
+
             per_mapping_num_robust_accurate = len(idxs)
             num_robust_accurate += per_mapping_num_robust_accurate
 
@@ -289,7 +305,7 @@ def attack(config, loader, models, log):
 
         if config.verbose:
             pbar.set_description(
-                f"Batch [{batch_id}]" +
+                f"Batch {batch_id}/{config.data.n_examples // config.data.batch_size}" +
                 f"   |   VRA: {num_robust_accurate/config.data.batch_size:.3f} "
                 +
                 f"   |   Attack VRA: {num_adv_robust_accurate/config.data.batch_size:.3f}"
