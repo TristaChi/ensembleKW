@@ -9,6 +9,7 @@ def get_config():
 
     config.data = ml_collections.ConfigDict()
     config.data.dataset = 'mnist'
+    config.data.n_examples = 10000
     config.data.normalization = '01'
     config.data.batch_size = 8
 

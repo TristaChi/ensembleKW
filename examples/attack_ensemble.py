@@ -1,30 +1,24 @@
-from absl import app
-from absl import flags
+import math
+import random
 
-from ml_collections import config_flags
-
+import numpy as np
+import setproctitle
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
+import torch.nn as nn
+
+import tqdm
+from absl import app
+from ml_collections import config_flags
+from torch.autograd import Variable
+
+import problems as pblm
+from convex_adversarial import RobustBounds, robust_loss, robust_loss_parallel
+from trainer import *
+from time import time
 
 cudnn.benchmark = True
 
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-import random
-
-import setproctitle
-
-import problems as pblm
-from trainer import *
-from convex_adversarial import robust_loss, robust_loss_parallel, RobustBounds
-from configs import attack as attack_configs
-
-import math
-import numpy as np
 
 def select_mnist_model(m):
     if m == 'large':
@@ -46,14 +40,18 @@ def select_cifar_model(m):
     return model
 
 
-def softmax_cross_entropy_with_softtarget(input, target, reduction='mean'):
+def kl_divergence(*, p_logits, q_probits, reduction='mean'):
     """
+    This is equivalent to the KL divergence when requiring gradients only on p_logits. 
+
     :param input: (batch, *)
     :param target: (batch, *) same shape as input, each item must be a valid distribution: target[i, :].sum() == 1.
     """
-    logprobs = torch.nn.functional.log_softmax(input.view(input.shape[0], -1),
+    logprobs = torch.nn.functional.log_softmax(p_logits.view(
+        p_logits.shape[0], -1),
                                                dim=1)
-    batchloss = -torch.sum(target.view(target.shape[0], -1) * logprobs, dim=1)
+    batchloss = -torch.sum(q_probits.view(q_probits.shape[0], -1) * logprobs,
+                           dim=1)
     if reduction == 'none':
         return batchloss
     elif reduction == 'mean':
@@ -149,16 +147,27 @@ def _direct_attack(config, models, X, y, modelid):
         )
 
     for j, model in enumerate(models):
+
+        # if model j is the one that makes the clean prediction,
+        # we skip it
         if j == modelid:
             continue
+
+        # The predicted label of model j
         y_pred = model(X).max(1)[1]
+
+        # We are only interested in models that already make different predicitons
+        # as the previous certifier, i.e. the first model that cerfifies its prediciton
+        # for the clean input, because if model j makes the same prediciton as the
+        # certifier, it is impossible to find an adversarial point within the eps-ball
+        # that outputs a different label with cetificate.
         candidates = (y_pred != y).nonzero()[:, 0]
+
         I_candidates = I[candidates]
         X_candidates = X[candidates]
         y_candidates = y[candidates]
         y_pred = y_pred[candidates]
 
-        # # perturb
         X_pgd = Variable(X_candidates, requires_grad=True)
         for _ in range(config.attack.steps):
 
@@ -173,14 +182,22 @@ def _direct_attack(config, models, X, y, modelid):
                                        Variable(X_pgd),
                                        Variable(y_pred),
                                        size_average=False)
-            loss_nocert = torch.zeros(loss_pred.size()).type_as(loss_pred.data)
+
+            # for all model i < j, they should fail to certify
+            loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
                 f = RobustBounds(models[k], eps)(Variable(X_pgd),
                                                  Variable(y_pred))
+
+                # To make model i, i<j, fail to certify the input,
+                # we push the adversarial point closer to the decision boundary
+                # by minimizing the KL divergence betweent its class probability
+                # distribution and a uniform distribution.
                 unif_dist = torch.ones(f.size()).type_as(f.data) / float(
                     f.size(1))
-                loss_nocert += softmax_cross_entropy_with_softtarget(
-                    f, unif_dist, reduction='none')
+                loss_nocert += kl_divergence(p_logits=f,
+                                             q_probits=unif_dist,
+                                             reduction='none')
 
             loss = loss_pred + loss_cert + loss_nocert
             loss.mean().backward()
@@ -189,12 +206,13 @@ def _direct_attack(config, models, X, y, modelid):
                 #l_inf PGD
                 eta = config.attack.step_size * X_pgd.grad.data.sign()
                 X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
+                eta = torch.clamp(X_pgd.data - X_candidates, -eps, eps)
+                X_pgd.data = X_candidates + eta
+
             elif config.attack.norm == 'l2':
                 raise NotImplementedError
 
-            # adjust to be within [-epsilon, epsilon]
-            eta = torch.clamp(X_pgd.data - X_candidates, -eps, eps)
-            X_pgd.data = X_candidates + eta
+            # Clip the input to a valid data range.
             X_pgd.data = torch.clamp(X_pgd.data, data_min, data_max)
 
         _, acc_certified_modelid_idx_map = eval_cascade(
@@ -206,7 +224,7 @@ def _direct_attack(config, models, X, y, modelid):
         if acc_certified_idxs:
             I_succ_candidates = I_candidates[torch.tensor(acc_certified_idxs)]
 
-            success_ids += I_succ_candidates.toList
+            success_ids += I_succ_candidates.tolist()
             x_attack += X_pgd[torch.tensor(acc_certified_idxs)].tolist()
 
             combined = torch.cat((I, I_succ_candidates))
@@ -220,42 +238,73 @@ def _direct_attack(config, models, X, y, modelid):
 
 def attack(config, loader, models, log):
     X_attack = []
-    success_ids = []
     dataset_size = 0
-    num_robust_accurate = 0
-    for _, (X, y) in enumerate(loader):
+    total_num_robust_accurate = 0
+    total_num_adv_robust_accurate = 0
+    total_success_ids = 0
+
+    pbar = enumerate(loader)
+
+    if config.verbose:
+        pbar = tqdm.tqdm(pbar)
+
+    for batch_id, (X, y) in pbar:
+
+        start = time()
+
         dataset_size += X.size(0)
         X, y = X.cuda(), y.cuda().long()
         if y.dim() == 2:
             y = y.squeeze(1)
 
-        #extract subset of dataset where ensemble is accurate and robust. Also, get id of constituent model used to make the prediction
+        # Extract a subset of dataset where ensemble is accurate and robust.
+        # Also, get the id of constituent model used to make the prediction
         certified_modelid_idx_map, acc_certified_modelid_idx_map = eval_cascade(
             config, models, X, y)
+
+        num_robust_accurate = 0
+        num_deny_of_service = 0
         for modelid, idxs in acc_certified_modelid_idx_map.items():
             X_curr = X[torch.tensor(idxs)]
             y_curr = y[torch.tensor(idxs)]
-            num_robust_accurate += len(idxs)
+            per_mapping_num_robust_accurate = len(idxs)
+            num_robust_accurate += per_mapping_num_robust_accurate
 
             if not config.attack.do_surrogate:
                 X_attack_i, success_ids_i = _direct_attack(
                     config, models, Variable(X_curr), Variable(y_curr),
                     modelid)
             else:
-                X_attack_i, success_ids_i = _surrogate_attack(
-                    config, models, Variable(X_curr), Variable(y_curr),
-                    modelid)
+                raise NotImplementedError
 
             X_attack += X_attack_i
-            success_ids += success_ids_i
+            num_deny_of_service += len(success_ids_i)
+
+        num_adv_robust_accurate = num_robust_accurate - num_deny_of_service
+
+        total_num_robust_accurate += num_robust_accurate
+        total_num_adv_robust_accurate += num_adv_robust_accurate
+
+        duration = time() - start
+
+        if config.verbose:
+            pbar.set_description(
+                f"Batch [{batch_id}]" +
+                f"   |   VRA: {num_robust_accurate/config.data.batch_size:.3f} "
+                +
+                f"   |   Attack VRA: {num_adv_robust_accurate/config.data.batch_size:.3f}"
+                +
+                f"   |   ETA: {duration * (0.0167 * config.data.n_examples // config.data.batch_size - batch_id - 1):.4f} min"
+            )
 
     print("Num inputs: ", dataset_size)
-    print("Num robust and accurate inputs: ", num_robust_accurate)
-    print("Num successfully attacked inputs: ", len(success_ids))
+    print("VRA: ", total_num_robust_accurate / dataset_size)
+    print("Adv VRA: ", total_num_adv_robust_accurate / dataset_size)
     return
 
 
 _CONFIG = config_flags.DEFINE_config_file('config')
+
 
 def main(_):
     config = _CONFIG.value
@@ -298,9 +347,9 @@ def main(_):
     train_log = open(config.io.output_file + "/" + "train_attack", "w")
     test_log = open(config.io.output_file + "/ " + "test_attack", "w")
 
-    attack(config, train_loader, models, train_log)
-    attack(config, test_loader, models, train_log)
+    # attack(config, train_loader, models, train_log)
+    attack(config, test_loader, models, test_log)
 
 
 if __name__ == '__main__':
-  app.run(main)
+    app.run(main)
