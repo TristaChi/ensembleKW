@@ -165,11 +165,15 @@ def _direct_attack(config, models, X, y, modelid):
         # for the clean input, because if model j makes the same prediciton as the
         # certifier, it is impossible to find an adversarial point within the eps-ball
         # that outputs a different label with cetificate.
-        candidates = (y_pred != y).nonzero()[:, 0]
+
+        print(f"y_pred != y: {y_pred != y}")
+        candidates = (y_pred != y).nonzero()
 
         # If there is no candidate, we skip this model j.
         if len(candidates) < 1:
             continue
+
+        candidates = candidates[:, 0]
 
         I_candidates = I[candidates]
         X_candidates = X[candidates]
@@ -187,27 +191,28 @@ def _direct_attack(config, models, X, y, modelid):
                 Variable(y_candidates))  # probably don't need this term
             loss_cert, _ = robust_loss(model,
                                        eps,
-                                       Variable(X_pgd),
+                                       X_pgd,
                                        Variable(y_pred),
                                        size_average=False)
 
             # for all model i < j, they should fail to certify
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
-                f = RobustBounds(models[k], eps)(Variable(X_pgd),
-                                                 Variable(y_pred))
+                worse_case_logit_k = RobustBounds(models[k],
+                                                  eps)(X_pgd, Variable(y_pred))
 
                 # To make model i, i<j, fail to certify the input,
                 # we push the adversarial point closer to the decision boundary
                 # by minimizing the KL divergence betweent its class probability
                 # distribution and a uniform distribution.
-                unif_dist = torch.ones(f.size()).type_as(f.data) / float(
-                    f.size(1))
-                loss_nocert += kl_divergence(p_logits=f,
+                unif_dist = torch.ones(worse_case_logit_k.size()).type_as(
+                    worse_case_logit_k.data) / float(
+                        worse_case_logit_k.size(1))
+                loss_nocert += kl_divergence(p_logits=worse_case_logit_k,
                                              q_probits=unif_dist,
                                              reduction='none')
 
-            loss = loss_pred + loss_cert + loss_nocert
+            loss = loss_cert + loss_nocert
             loss.mean().backward()
 
             if config.attack.norm == 'linf':
@@ -249,13 +254,10 @@ def attack(config, loader, models, log):
     dataset_size = 0
     total_num_robust_accurate = 0
     total_num_adv_robust_accurate = 0
+    duration = 0
+    num_batches = config.data.n_examples // config.data.batch_size
 
-    pbar = enumerate(loader)
-
-    if config.verbose:
-        pbar = tqdm.tqdm(pbar)
-
-    for batch_id, (X, y) in pbar:
+    for batch_id, (X, y) in enumerate(loader):
 
         start = time()
 
@@ -266,13 +268,12 @@ def attack(config, loader, models, log):
 
         # Extract a subset of batch where ensemble is accurate and robust.
         # Also, get the id of constituent model used to make the prediction
-        # acc_certified_modelid_idx_map is a dictionary mapping from 
-        # model_id to the list of batch-leve indixces of points it certifies.  
-        _, acc_certified_modelid_idx_map = eval_cascade(
-            config, models, X, y)
-        
+        # acc_certified_modelid_idx_map is a dictionary mapping from
+        # model_id to the list of batch-leve indixces of points it certifies.
+        _, acc_certified_modelid_idx_map = eval_cascade(config, models, X, y)
+
         # acc_certified_modelid_idx_map is a empty dictionary,
-        # which means no point is both accurate and robust. 
+        # which means no point is both accurate and robust.
         if len(acc_certified_modelid_idx_map.keys()) == 0:
             continue
 
@@ -301,16 +302,19 @@ def attack(config, loader, models, log):
         total_num_robust_accurate += num_robust_accurate
         total_num_adv_robust_accurate += num_adv_robust_accurate
 
-        duration = time() - start
+        if duration > 0:
+            duration = (time() - start) * 0.05 + duration * 0.95
+        else:
+            duration = time() - start
 
         if config.verbose:
-            pbar.set_description(
-                f"Batch {batch_id}/{config.data.n_examples // config.data.batch_size}" +
+            print(
+                f"Batch {batch_id}/{num_batches}" +
                 f"   |   VRA: {num_robust_accurate/config.data.batch_size:.3f} "
                 +
                 f"   |   Attack VRA: {num_adv_robust_accurate/config.data.batch_size:.3f}"
                 +
-                f"   |   ETA: {duration * (0.0167 * config.data.n_examples // config.data.batch_size - batch_id - 1):.4f} min"
+                f"   |   ETA: {0.0167 * duration * (num_batches - batch_id - 1):.1f} min"
             )
 
     print("Num inputs: ", dataset_size)
