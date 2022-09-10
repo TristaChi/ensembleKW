@@ -180,6 +180,7 @@ def _direct_attack(config, models, X, y, modelid):
         y_candidates = y[candidates]
         y_pred = y_pred[candidates]
 
+        # TODO: implement random start
         X_pgd = Variable(X_candidates, requires_grad=True)
         for _ in range(config.attack.steps):
 
@@ -188,18 +189,18 @@ def _direct_attack(config, models, X, y, modelid):
 
             loss_pred = -nn.CrossEntropyLoss(reduction='none')(
                 model(X_pgd),
-                Variable(y_candidates))  # probably don't need this term
+                y_candidates)  # probably don't need this term
             loss_cert, _ = robust_loss(model,
                                        eps,
                                        X_pgd,
-                                       Variable(y_pred),
+                                       y_pred,
                                        size_average=False)
 
             # for all model i < j, they should fail to certify
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
                 worse_case_logit_k = RobustBounds(models[k],
-                                                  eps)(X_pgd, Variable(y_pred))
+                                                  eps)(X_pgd, y_pred)
 
                 # To make model i, i<j, fail to certify the input,
                 # we push the adversarial point closer to the decision boundary
@@ -223,7 +224,22 @@ def _direct_attack(config, models, X, y, modelid):
                 X_pgd.data = X_candidates + eta
 
             elif config.attack.norm == 'l2':
-                raise NotImplementedError
+                #l_2 PGD
+                # Assumes X_candidates and X_pgd are batched tensors where the first dimension is
+                # a batch dimension, i.e., .view() assumes batched images as a 4D Tensor
+                grad_norms = torch.linalg.norm(X_pgd.grad.view(X_pgd.shape[0], -1), dim=1)
+                eta = config.attack.step_size * X_pgd.grad / grad_norms.view(-1, 1, 1, 1)
+                X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
+                delta = X_pgd.data - X_candidates
+
+                mask = torch.linalg.norm(delta.view(delta.shape[0], -1), dim=1) <= eps
+
+                scaling_factor = torch.linalg.norm(delta.view(delta.shape[0], -1), dim=1)
+                scaling_factor[mask] = eps
+
+                delta *= eps / scaling_factor.view(-1, 1, 1, 1)
+
+                X_pgd.data = X_candidates + delta
 
             # Clip the input to a valid data range.
             X_pgd.data = torch.clamp(X_pgd.data, data_min, data_max)
