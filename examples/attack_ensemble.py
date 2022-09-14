@@ -1,4 +1,4 @@
-import math
+
 import random
 
 import numpy as np
@@ -14,42 +14,47 @@ from torch.autograd import Variable
 
 import problems as pblm
 from convex_adversarial import RobustBounds, robust_loss, robust_loss_parallel
-from trainer import *
-from time import time
+from trainer import * # pylint: disable=import-error
+from time import time # pylint: disable=import-error
 
 cudnn.benchmark = True
+
+device = 'cpu'
+
 
 
 def select_mnist_model(m):
     if m == 'large':
-        model = pblm.mnist_model_large().cuda()
+        model = pblm.mnist_model_large().to(device)
+
         # _, test_loader = pblm.mnist_loaders(8)
     else:
-        model = pblm.mnist_model().cuda()
+        model = pblm.mnist_model().to(device)
     return model
 
 
 def select_cifar_model(m):
     if m == 'large':
         # raise ValueError
-        model = pblm.cifar_model_large().cuda()
+        model = pblm.cifar_model_large().to(device)
     elif m == 'resnet':
-        model = pblm.cifar_model_resnet(N=1, factor=1).cuda()
+        model = pblm.cifar_model_resnet(N=1, factor=1).to(device)
     else:
-        model = pblm.cifar_model().cuda()
+        model = pblm.cifar_model().to(device)
     return model
 
 
-def kl_divergence(*, p_logits, q_probits, reduction='mean'):
+def cross_entropy(*, p_logits, q_probits, reduction='mean'):
     """
-    This is equivalent to the KL divergence when requiring gradients only on p_logits. 
+    This is equivalent to the KL divergence when requiring gradients only on p_logits.
 
     :param input: (batch, *)
-    :param target: (batch, *) same shape as input, each item must be a valid distribution: target[i, :].sum() == 1.
+    :param target: (batch, *) same shape as input, each item must be a
+        valid distribution: target[i, :].sum() == 1.
     """
     logprobs = torch.nn.functional.log_softmax(p_logits.view(
         p_logits.shape[0], -1),
-                                               dim=1)
+        dim=1)
     batchloss = -torch.sum(q_probits.view(q_probits.shape[0], -1) * logprobs,
                            dim=1)
     if reduction == 'none':
@@ -57,9 +62,16 @@ def kl_divergence(*, p_logits, q_probits, reduction='mean'):
     elif reduction == 'mean':
         return torch.mean(batchloss)
     elif reduction == 'sum':
+
         return torch.sum(batchloss)
     else:
         raise NotImplementedError('Unsupported reduction mode.')
+
+
+def sparse_cross_entropy(*,  p_logits, q_sparse, reduction='mean'):
+    num_classes = p_logits.shape[1]
+    q_probits = torch.nn.functional.one_hot(q_sparse, num_classes=num_classes)
+    return cross_entropy(p_logits=p_logits, q_probits=q_probits, reduction=reduction)
 
 
 def eval_cascade(config, models, X, y):
@@ -128,14 +140,68 @@ def eval_cascade(config, models, X, y):
     return certified_modelid_idx_map, acc_certified_modelid_idx_map
 
 
-def _surrogate_attack(config, models, epsilon, X, y, modelid):
-    return
+def make_objective_fn(config):
+    if not config.attack.do_surrogate:
+        def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
+
+            # for model j, we encourage it to certify the current input.
+            loss_cert, _ = robust_loss(model,
+                                       eps,
+                                       X_pgd,
+                                       y_pred,
+                                       size_average=False)
+
+            # for all model i < j, they should fail to certify the current input
+            loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
+            for k in range(j):
+                worse_case_logit_k = RobustBounds(all_models[k],
+                                                  eps)(X_pgd, y_pred)
+
+                # To make model i, i<j, fail to certify the input,
+                # we push the adversarial point closer to the decision boundary
+                # by minimizing the KL divergence betweent its class probability
+                # distribution and a uniform distribution.
+                unif_dist = torch.ones(worse_case_logit_k.size()).type_as(
+                    worse_case_logit_k.data) / float(
+                        worse_case_logit_k.size(1))
+                loss_nocert += cross_entropy(p_logits=worse_case_logit_k,
+                                             q_probits=unif_dist,
+                                             reduction='none')
+
+            return loss_cert + loss_nocert
+    else:
+        def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
+
+            loss_cert = sparse_cross_entropy(
+                p_logits=model(X_pgd), q_sparse=y_pred, reduction='none')
+            # for all model i < j, they should fail to certify the current input
+            loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
+            for k in range(j):
+
+                output_k = all_models[k](X_pgd)
+
+                # To make model i, i<j, fail to certify the input,
+                # we push the adversarial point closer to the decision boundary
+                # by minimizing the KL divergence betweent its class probability
+                # distribution and a uniform distribution.
+                unif_dist = torch.ones(output_k.size()).type_as(
+                    output_k.data) / float(
+                        output_k.size(1))
+                loss_nocert += cross_entropy(p_logits=output_k,
+                                             q_probits=unif_dist, reduction='none')
+            return loss_cert + loss_nocert
+
+    return objective_fn
 
 
-def _direct_attack(config, models, X, y, modelid):
-    x_attack = []
-    success_ids = []
-    I = torch.arange(X.size(0)).type_as(y.data)
+def attack_step(config, models, data, labels, modelid):
+
+    data_clone = torch.clone(data)
+    labels_clone = torch.clone(labels)
+
+    noisy_data = []
+    idx_for_noisy_data = []
+    idx_for_all_data = torch.arange(data_clone.size(0)).type_as(labels_clone.data)
 
     if config.data.normalization == '01':
         eps = config.attack.eps
@@ -150,6 +216,12 @@ def _direct_attack(config, models, X, y, modelid):
             f"The range of the data {config.data.normalization} is not understood."
         )
 
+    attack_objective_fn = make_objective_fn(config)
+
+    # This array stores where we have already found an adversarial example for
+    # each input. If an adversarial example is found, we stop the attack.
+    keep_attack = torch.ones(data.size(0)).type_as(data.data)
+
     for j, model in enumerate(models):
 
         # if model j is the one that makes the clean prediction,
@@ -158,135 +230,107 @@ def _direct_attack(config, models, X, y, modelid):
             continue
 
         # The predicted label of model j
-        y_pred = model(X).max(1)[1]
+        y_pred = model(data_clone).max(1)[1]
 
         # We are only interested in models that already make different predicitons
         # as the previous certifier, i.e. the first model that cerfifies its prediciton
         # for the clean input, because if model j makes the same prediciton as the
         # certifier, it is impossible to find an adversarial point within the eps-ball
         # that outputs a different label with cetificate.
-
-        print(f"y_pred != y: {y_pred != y}")
-        candidates = (y_pred != y).nonzero()
+        candidates = (y_pred != labels_clone).nonzero().squeeze(1)
 
         # If there is no candidate, we skip this model j.
         if len(candidates) < 1:
             continue
 
-        candidates = candidates[:, 0]
-
-        I_candidates = I[candidates]
-        X_candidates = X[candidates]
-        y_candidates = y[candidates]
-        y_pred = y_pred[candidates]
+        batch_candidate_idx = idx_for_all_data[candidates]
+        data_candidates = data_clone[candidates]
+        candidate_pred = y_pred[candidates]
+        candidate_keep_attack = torch.clone(keep_attack[candidates])
 
         # TODO: implement random start
-        X_pgd = Variable(X_candidates, requires_grad=True)
+        data_pgd = Variable(data_candidates, requires_grad=True)
         for _ in range(config.attack.steps):
 
             # TODO add Adam optimizer
             # opt_pgd = optim.Adam([X_pgd], lr=config.attack.step_size)
 
-            loss_pred = -nn.CrossEntropyLoss(reduction='none')(
-                model(X_pgd),
-                y_candidates)  # probably don't need this term
-            loss_cert, _ = robust_loss(model,
-                                       eps,
-                                       X_pgd,
-                                       y_pred,
-                                       size_average=False)
-
-            # for all model i < j, they should fail to certify
-            loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
-            for k in range(j):
-                worse_case_logit_k = RobustBounds(models[k],
-                                                  eps)(X_pgd, y_pred)
-
-                # To make model i, i<j, fail to certify the input,
-                # we push the adversarial point closer to the decision boundary
-                # by minimizing the KL divergence betweent its class probability
-                # distribution and a uniform distribution.
-                unif_dist = torch.ones(worse_case_logit_k.size()).type_as(
-                    worse_case_logit_k.data) / float(
-                        worse_case_logit_k.size(1))
-                loss_nocert += kl_divergence(p_logits=worse_case_logit_k,
-                                             q_probits=unif_dist,
-                                             reduction='none')
-
-            loss = loss_cert + loss_nocert
+            loss = attack_objective_fn(j, model, models, eps, data_pgd, candidate_pred)
             loss.mean().backward()
 
             if config.attack.norm == 'linf':
-                #l_inf PGD
-                eta = config.attack.step_size * X_pgd.grad.data.sign()
-                X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
-                eta = torch.clamp(X_pgd.data - X_candidates, -eps, eps)
-                X_pgd.data = X_candidates + eta
+                # l_inf PGD
+                eta = config.attack.step_size * data_pgd.grad.data.sign()
+                data_pgd = Variable(data_pgd.data + eta, requires_grad=True)
+                eta = torch.clamp(data_pgd.data - data_candidates, -eps, eps)
+                data_pgd.data = data_candidates + eta * candidate_keep_attack.view(-1, 1, 1, 1)
 
             elif config.attack.norm == 'l2':
-                #l_2 PGD
+                # l_2 PGD
                 # Assumes X_candidates and X_pgd are batched tensors where the first dimension is
                 # a batch dimension, i.e., .view() assumes batched images as a 4D Tensor
-                grad_norms = torch.linalg.norm(X_pgd.grad.view(X_pgd.shape[0], -1), dim=1)
-                eta = config.attack.step_size * X_pgd.grad / grad_norms.view(-1, 1, 1, 1)
-                X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
-                delta = X_pgd.data - X_candidates
+                grad_norms = torch.linalg.norm(
+                    data_pgd.grad.view(data_pgd.shape[0], -1), dim=1)
+                eta = config.attack.step_size * \
+                    data_pgd.grad / grad_norms.view(-1, 1, 1, 1)
+                data_pgd = Variable(data_pgd.data + eta, requires_grad=True)
+                delta = data_pgd.data - data_candidates
 
-                mask = torch.linalg.norm(delta.view(delta.shape[0], -1), dim=1) <= eps
+                mask = torch.linalg.norm(delta.view(
+                    delta.shape[0], -1), dim=1) <= eps
 
-                scaling_factor = torch.linalg.norm(delta.view(delta.shape[0], -1), dim=1)
+                scaling_factor = torch.linalg.norm(
+                    delta.view(delta.shape[0], -1), dim=1)
                 scaling_factor[mask] = eps
 
                 delta *= eps / scaling_factor.view(-1, 1, 1, 1)
 
-                X_pgd.data = X_candidates + delta
+                data_pgd.data = data_candidates + delta * candidate_keep_attack.view(-1, 1, 1, 1)
 
             # Clip the input to a valid data range.
-            X_pgd.data = torch.clamp(X_pgd.data, data_min, data_max)
+            data_pgd.data = torch.clamp(data_pgd.data, data_min, data_max)
 
+        # Check whether the model is certifiably robust on a different label after the attack.
         _, acc_certified_modelid_idx_map = eval_cascade(
-            config, models, X_pgd, y_pred)
+            config, models, data_pgd, candidate_pred)
         acc_certified_idxs = []
+
         for _, idxs in acc_certified_modelid_idx_map.items():
             acc_certified_idxs += idxs
 
         if acc_certified_idxs:
-            I_succ_candidates = I_candidates[torch.tensor(acc_certified_idxs)]
+            # If we have found an adversarial example for an input, we stop the attack.
+            candidate_keep_attack[torch.tensor(acc_certified_idxs)] = 0
 
-            success_ids += I_succ_candidates.tolist()
-            x_attack += X_pgd[torch.tensor(acc_certified_idxs)].tolist()
+        keep_attack[candidates] = torch.minimum(candidate_keep_attack, keep_attack[candidates])
 
-            combined = torch.cat((I, I_succ_candidates))
-            uniques, counts = combined.unique(return_counts=True)
-            I = uniques[counts == 1]
-            X = X[I]
-            y = y[I]
+    noisy_data = data[keep_attack == 0]
 
-    return x_attack, success_ids
+    return noisy_data, 1 - keep_attack
 
 
 def attack(config, loader, models, log):
-    X_attack = []
+    data_adv = []
     dataset_size = 0
     total_num_robust_accurate = 0
     total_num_adv_robust_accurate = 0
     duration = 0
     num_batches = config.data.n_examples // config.data.batch_size
 
-    for batch_id, (X, y) in enumerate(loader):
+    for batch_id, (data, label) in enumerate(loader):
 
         start = time()
 
-        dataset_size += X.size(0)
-        X, y = X.cuda(), y.cuda().long()
-        if y.dim() == 2:
-            y = y.squeeze(1)
+        dataset_size += data.size(0)
+        data, label = data.to(device), label.to(device).long()
+        if label.dim() == 2:
+            label = label.squeeze(1)
 
         # Extract a subset of batch where ensemble is accurate and robust.
         # Also, get the id of constituent model used to make the prediction
         # acc_certified_modelid_idx_map is a dictionary mapping from
         # model_id to the list of batch-leve indixces of points it certifies.
-        _, acc_certified_modelid_idx_map = eval_cascade(config, models, X, y)
+        _, acc_certified_modelid_idx_map = eval_cascade(config, models, data, label)
 
         # acc_certified_modelid_idx_map is a empty dictionary,
         # which means no point is both accurate and robust.
@@ -297,21 +341,20 @@ def attack(config, loader, models, log):
         num_deny_of_service = 0
         for modelid, idxs in acc_certified_modelid_idx_map.items():
 
-            X_curr = X[torch.tensor(idxs)]
-            y_curr = y[torch.tensor(idxs)]
+            # rc = robust and accurate
+            # We take the subset of batch where ensemble is accurate and robust.
+            rc_data = data[torch.tensor(idxs)]
+            rc_label = label[torch.tensor(idxs)]
 
             per_mapping_num_robust_accurate = len(idxs)
             num_robust_accurate += per_mapping_num_robust_accurate
 
-            if not config.attack.do_surrogate:
-                X_attack_i, success_ids_i = _direct_attack(
-                    config, models, Variable(X_curr), Variable(y_curr),
-                    modelid)
-            else:
-                raise NotImplementedError
+            data_adv_i, is_adv = attack_step(
+                config, models, Variable(rc_data), Variable(rc_label),
+                modelid)
 
-            X_attack += X_attack_i
-            num_deny_of_service += len(success_ids_i)
+            data_adv += data_adv_i
+            num_deny_of_service += len(data_adv_i)
 
         num_adv_robust_accurate = num_robust_accurate - num_deny_of_service
 
