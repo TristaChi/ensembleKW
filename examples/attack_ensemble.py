@@ -252,7 +252,8 @@ def attack_step(config, models, data, labels, modelid):
         # for the clean input, because if model j makes the same prediciton as the
         # certifier (model modelid), it is impossible to find an adversarial point within the eps-ball
         # that outputs a different label with certificate.
-        candidates = (y_pred != labels_clone).nonzero().squeeze(1)
+        candidates = torch.logical_and((y_pred != labels_clone), keep_attack)
+        candidates = candidates.nonzero().squeeze(1)
 
         # If there is no candidate, we skip this model j.
         if len(candidates) < 1:
@@ -365,7 +366,7 @@ def attack(config, loader, models, log):
 
         num_robust_accurate = 0
         num_succ_attack_on_certified = 0
-        if len(acc_certified_modelid_idx_map.keys()) == 0:
+        if len(acc_certified_modelid_idx_map.keys()) != 0:
             for modelid, idxs in acc_certified_modelid_idx_map.items():
 
                 # rc = robust and accurate
@@ -385,7 +386,7 @@ def attack(config, loader, models, log):
         
         num_accurate_not_robust = 0
         num_succ_attack_on_uncertified = 0
-        if len(acc_uncertified_idx) == 0:
+        if len(acc_uncertified_idx) != 0:
             # nc = not robust and accurate
             # We take the subset of batch where ensemble is accurate and not robust.
             nc_data = data[torch.tensor(acc_uncertified_idx)]
