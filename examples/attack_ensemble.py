@@ -159,9 +159,11 @@ def make_objective_fn(config, cert_needed=True):
     if not cert_needed:
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
-            loss_cert = -1 * sparse_cross_entropy(
+            # for model j, we encourage it to have a different prediction at the current input.
+            loss_cert = sparse_cross_entropy(
                 p_logits=model(X_pgd), q_sparse=y_pred, reduction='none')
-            # for all model i < j, they should fail to certify the current input
+
+            # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
 
@@ -176,7 +178,7 @@ def make_objective_fn(config, cert_needed=True):
                         output_k.size(1))
                 loss_nocert += cross_entropy(p_logits=output_k,
                                              q_probits=unif_dist, reduction='none')
-            return loss_cert + loss_nocert
+            return loss_cert - loss_nocert
             
 
 
@@ -190,7 +192,7 @@ def make_objective_fn(config, cert_needed=True):
                                        y_pred,
                                        size_average=False)
 
-            # for all model i < j, they should fail to certify the current input
+            # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
                 worse_case_logit_k = RobustBounds(all_models[k],
@@ -207,13 +209,15 @@ def make_objective_fn(config, cert_needed=True):
                                              q_probits=unif_dist,
                                              reduction='none')
 
-            return loss_cert + loss_nocert
+            return -loss_cert - loss_nocert
     else:
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
+            # for model j, we encourage it to certify the current input.
             loss_cert = sparse_cross_entropy(
                 p_logits=model(X_pgd), q_sparse=y_pred, reduction='none')
-            # for all model i < j, they should fail to certify the current input
+
+            # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
 
@@ -228,7 +232,7 @@ def make_objective_fn(config, cert_needed=True):
                         output_k.size(1))
                 loss_nocert += cross_entropy(p_logits=output_k,
                                              q_probits=unif_dist, reduction='none')
-            return loss_cert + loss_nocert
+            return -loss_cert - loss_nocert
 
     return objective_fn
 
