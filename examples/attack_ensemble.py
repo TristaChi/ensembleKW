@@ -73,8 +73,10 @@ def sparse_cross_entropy(*,  p_logits, q_sparse, reduction='mean'):
     q_probits = torch.nn.functional.one_hot(q_sparse, num_classes=num_classes)
     return cross_entropy(p_logits=p_logits, q_probits=q_probits, reduction=reduction)
 
-
-def eval_cascade(config, models, X, y):
+# Evaluates the casacade given data X and labels y. 
+# match_y=True if the predictions of cascade count as accurate when they match label y,
+# while match_y=False if the predictions of cascade count as accurate when they do not match label y
+def eval_cascade(config, models, X, y, match_y=True):
     if config.data.normalization == '01':
         eps = config.attack.eps
     elif config.data.normalization == '-11':
@@ -87,13 +89,16 @@ def eval_cascade(config, models, X, y):
     torch.set_grad_enabled(False)
     I = torch.arange(X.size(0)).type_as(y.data)
 
-    # map from modelid to indices of elements in X where model <modelid>
-    # is used to make the ensemble prediction and the predictions are robust
+    # Map from modelid to indices of elements in X where model <modelid>
+    # is used to make the ensemble prediction and the predictions are robust.
     certified_modelid_idx_map = {}
 
-    # map from modelid to indices of elements in X where model <modelid>
+    # Map from modelid to indices of elements in X where model <modelid>
     # is used to make the ensemble prediction and the predictions are accurate & robust
     acc_certified_modelid_idx_map = {}
+
+    # List of indices of elements in X where ensemble predictions are accurate but not robust.
+    acc_uncertified_idx = []
 
     for j, model in enumerate(models):
 
@@ -114,14 +119,25 @@ def eval_cascade(config, models, X, y):
             pass
             # print("Warning: Cascade stage {} has no certified values.".format(j+1))
         else:
-            value = I[certified.nonzero()[:, 0]].tolist()
-            if len(value) > 0:
-                certified_modelid_idx_map[j] = value
+            value_certified = I[certified.nonzero()[:, 0]].tolist()
+            if len(value_certified) > 0:
+                certified_modelid_idx_map[j] = value_certified
 
-            acc_certified = torch.logical_and(certified, out.max(1)[1] == y)
-            value = I[acc_certified.nonzero()[:, 0]].tolist()
-            if len(value) > 0:
-                acc_certified_modelid_idx_map[j] = value
+            if match_y:
+                acc_certified = torch.logical_and(certified, out.max(1)[1] == y)
+            else:
+                acc_certified = torch.logical_and(certified, out.max(1)[1] != y)
+            value_acc_certified = I[acc_certified.nonzero()[:, 0]].tolist()
+            if len(value_acc_certified) > 0:
+                acc_certified_modelid_idx_map[j] = value_acc_certified
+            
+            if match_y:
+                acc_uncertified = torch.logical_and(uncertified, out.max(1)[1] == y)
+            else:
+                acc_uncertified = torch.logical_and(uncertified, out.max(1)[1] != y)
+            value_acc_uncertified = I[acc_uncertified.nonzero()[:, 0]].tolist()
+            if len(value_acc_uncertified) > 0:
+                acc_uncertified_idx += value_acc_uncertified
 
             # reduce data set to uncertified examples
             if uncertified.sum() > 0:
@@ -131,13 +147,13 @@ def eval_cascade(config, models, X, y):
             else:
                 torch.cuda.empty_cache()
                 torch.set_grad_enabled(True)
-                return certified_modelid_idx_map, acc_certified_modelid_idx_map
+                return certified_modelid_idx_map, acc_certified_modelid_idx_map, acc_uncertified_idx
 
         ####################################################################
     torch.cuda.empty_cache()
     torch.set_grad_enabled(True)
 
-    return certified_modelid_idx_map, acc_certified_modelid_idx_map
+    return certified_modelid_idx_map, acc_certified_modelid_idx_map, acc_uncertified_idx
 
 
 def make_objective_fn(config):
@@ -200,7 +216,6 @@ def attack_step(config, models, data, labels, modelid):
     labels_clone = torch.clone(labels)
 
     noisy_data = []
-    idx_for_noisy_data = []
     idx_for_all_data = torch.arange(data_clone.size(0)).type_as(labels_clone.data)
 
     if config.data.normalization == '01':
@@ -233,19 +248,20 @@ def attack_step(config, models, data, labels, modelid):
         y_pred = model(data_clone).max(1)[1]
 
         # We are only interested in models that already make different predicitons
-        # as the previous certifier, i.e. the first model that cerfifies its prediciton
+        # from the previous certifier, i.e. the first model that cerfifies its prediciton
         # for the clean input, because if model j makes the same prediciton as the
-        # certifier, it is impossible to find an adversarial point within the eps-ball
-        # that outputs a different label with cetificate.
+        # certifier (model modelid), it is impossible to find an adversarial point within the eps-ball
+        # that outputs a different label with certificate.
         candidates = (y_pred != labels_clone).nonzero().squeeze(1)
 
         # If there is no candidate, we skip this model j.
         if len(candidates) < 1:
             continue
 
-        batch_candidate_idx = idx_for_all_data[candidates]
+        candidate_idx = idx_for_all_data[candidates]
         data_candidates = data_clone[candidates]
         candidate_pred = y_pred[candidates]
+        candidate_labels = labels_clone[candidates]
         candidate_keep_attack = torch.clone(keep_attack[candidates])
 
         # TODO: implement random start
@@ -291,8 +307,8 @@ def attack_step(config, models, data, labels, modelid):
             data_pgd.data = torch.clamp(data_pgd.data, data_min, data_max)
 
         # Check whether the model is certifiably robust on a different label after the attack.
-        _, acc_certified_modelid_idx_map = eval_cascade(
-            config, models, data_pgd, candidate_pred)
+        _, acc_certified_modelid_idx_map, _ = eval_cascade(
+            config, models, data_pgd, candidate_labels, match_y=False)
         acc_certified_idxs = []
 
         for _, idxs in acc_certified_modelid_idx_map.items():
@@ -310,10 +326,16 @@ def attack_step(config, models, data, labels, modelid):
 
 
 def attack(config, loader, models, log):
-    data_adv = []
+    # data_adv = []
     dataset_size = 0
     total_num_robust_accurate = 0
     total_num_adv_robust_accurate = 0
+    total_num_succ_attack_on_certified = 0
+
+    total_num_accurate_not_robust = 0
+    total_num_succ_attack_on_uncertified = 0
+    total_num_emp_robust_accurate = 0
+    
     duration = 0
     num_batches = config.data.n_examples // config.data.batch_size
 
@@ -329,37 +351,62 @@ def attack(config, loader, models, log):
         # Extract a subset of batch where ensemble is accurate and robust.
         # Also, get the id of constituent model used to make the prediction
         # acc_certified_modelid_idx_map is a dictionary mapping from
-        # model_id to the list of batch-leve indixces of points it certifies.
-        _, acc_certified_modelid_idx_map = eval_cascade(config, models, data, label)
+        # model_id to the list of batch-level indices of points it certifies accurately.
+        # acc_uncertified_idx is a list of batch-level indices of points that ensemble
+        #  predicts accurately but does not certify.
+        _, acc_certified_modelid_idx_map, acc_uncertified_idx = eval_cascade(config, models, data, label)
 
         # acc_certified_modelid_idx_map is a empty dictionary,
         # which means no point is both accurate and robust.
-        if len(acc_certified_modelid_idx_map.keys()) == 0:
+        # Also, acc_uncertified_idx is an empty list,
+        # which means no point is both accurate and not certified robust.
+        if len(acc_certified_modelid_idx_map.keys()) == 0 and len(acc_uncertified_idx) == 0:
             continue
 
         num_robust_accurate = 0
-        num_deny_of_service = 0
-        for modelid, idxs in acc_certified_modelid_idx_map.items():
+        num_succ_attack_on_certified = 0
+        if len(acc_certified_modelid_idx_map.keys()) == 0:
+            for modelid, idxs in acc_certified_modelid_idx_map.items():
 
-            # rc = robust and accurate
-            # We take the subset of batch where ensemble is accurate and robust.
-            rc_data = data[torch.tensor(idxs)]
-            rc_label = label[torch.tensor(idxs)]
+                # rc = robust and accurate
+                # We take the subset of batch where ensemble is accurate and robust.
+                rc_data = data[torch.tensor(idxs)]
+                rc_label = label[torch.tensor(idxs)]
 
-            per_mapping_num_robust_accurate = len(idxs)
-            num_robust_accurate += per_mapping_num_robust_accurate
+                per_mapping_num_robust_accurate = len(idxs)
+                num_robust_accurate += per_mapping_num_robust_accurate
 
-            data_adv_i, is_adv = attack_step(
-                config, models, Variable(rc_data), Variable(rc_label),
-                modelid)
+                data_adv_i, is_adv = attack_step(
+                    config, models, Variable(rc_data), Variable(rc_label),
+                    modelid)
 
-            data_adv += data_adv_i
-            num_deny_of_service += len(data_adv_i)
+                # data_adv += data_adv_i
+                num_succ_attack_on_certified += len(data_adv_i)
+        
+        num_accurate_not_robust = 0
+        num_succ_attack_on_uncertified = 0
+        if len(acc_uncertified_idx) == 0:
+            # nc = not robust and accurate
+            # We take the subset of batch where ensemble is accurate and not robust.
+            nc_data = data[torch.tensor(acc_uncertified_idx)]
+            nc_label = label[torch.tensor(acc_uncertified_idx)]
 
-        num_adv_robust_accurate = num_robust_accurate - num_deny_of_service
+            data_adv_nc, is_adv = attack_step(
+                config, models, Variable(nc_data), Variable(nc_label),
+                len(models)-1)
 
+            # data_adv += data_adv_nc
+            num_succ_attack_on_uncertified += len(data_adv_nc)
+
+        num_adv_robust_accurate = num_robust_accurate - num_succ_attack_on_certified
         total_num_robust_accurate += num_robust_accurate
         total_num_adv_robust_accurate += num_adv_robust_accurate
+        total_num_succ_attack_on_certified += num_succ_attack_on_certified
+
+        num_emp_robust_accurate = (num_robust_accurate + num_accurate_not_robust) - (num_succ_attack_on_certified + num_succ_attack_on_uncertified)
+        total_num_accurate_not_robust += num_accurate_not_robust
+        total_num_succ_attack_on_uncertified += num_succ_attack_on_uncertified
+        total_num_emp_robust_accurate += num_emp_robust_accurate
 
         if duration > 0:
             duration = (time() - start) * 0.05 + duration * 0.95
@@ -369,16 +416,22 @@ def attack(config, loader, models, log):
         if config.verbose:
             print(
                 f"Batch {batch_id}/{num_batches}" +
-                f"   |   VRA: {num_robust_accurate/config.data.batch_size:.3f} "
+                f"   |   Ensemble Reported CRA: {num_robust_accurate/config.data.batch_size:.3f} "
                 +
-                f"   |   Attack VRA: {num_adv_robust_accurate/config.data.batch_size:.3f}"
+                f"   |   Post Attack CRA: {num_adv_robust_accurate/config.data.batch_size:.3f}"
+                +
+                f"   |   Attack Success Rate: {num_succ_attack_on_certified/num_robust_accurate:.3f}"
+                +
+                f"   |   Ensemble ERA: {num_emp_robust_accurate/config.data.batch_size:.3f}"
                 +
                 f"   |   ETA: {0.0167 * duration * (num_batches - batch_id - 1):.1f} min"
             )
 
     print("Num inputs: ", dataset_size)
-    print("VRA: ", total_num_robust_accurate / dataset_size)
-    print("Adv VRA: ", total_num_adv_robust_accurate / dataset_size)
+    print("Ensemble Reported CRA: ", total_num_robust_accurate / dataset_size)
+    print("Post Attack CRA: ", total_num_adv_robust_accurate / dataset_size)
+    print("Attack Success Rate: ", total_num_succ_attack_on_certified / total_num_robust_accurate)
+    print("Ensemble CRA: ", total_num_emp_robust_accurate / dataset_size)
     return
 
 
