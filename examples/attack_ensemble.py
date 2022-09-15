@@ -90,15 +90,16 @@ def eval_cascade(config, models, X, y, match_y=True):
     I = torch.arange(X.size(0)).type_as(y.data)
 
     # Map from modelid to indices of elements in X where model <modelid>
-    # is used to make the ensemble prediction and the predictions are robust.
-    certified_modelid_idx_map = {}
+    # is used to make the ensemble prediction and the predictions are certified robust.
+    CR_modelid_idx_map = {}
 
     # Map from modelid to indices of elements in X where model <modelid>
-    # is used to make the ensemble prediction and the predictions are accurate & robust
-    acc_certified_modelid_idx_map = {}
+    # is used to make the ensemble prediction and the predictions are certified robust & accurate.
+    CRA_modelid_idx_map = {}
 
-    # List of indices of elements in X where ensemble predictions are accurate but not robust.
-    acc_uncertified_idx = []
+    # List of indices of elements in X where ensemble predictions are accurate but not certified robust.
+    # Since all such predictions are made by the last model in the ensemble, we do not need to record the modelid. 
+    A_idxs = []
 
     for j, model in enumerate(models):
 
@@ -119,25 +120,23 @@ def eval_cascade(config, models, X, y, match_y=True):
             pass
             # print("Warning: Cascade stage {} has no certified values.".format(j+1))
         else:
-            value_certified = I[certified.nonzero()[:, 0]].tolist()
-            if len(value_certified) > 0:
-                certified_modelid_idx_map[j] = value_certified
+            CR_idxs = I[certified.nonzero()[:, 0]].tolist()
+            if len(CR_idxs) > 0:
+                CR_modelid_idx_map[j] = CR_idxs
 
             if match_y:
-                acc_certified = torch.logical_and(certified, out.max(1)[1] == y)
+                certified_acc = torch.logical_and(certified, out.max(1)[1] == y)
             else:
-                acc_certified = torch.logical_and(certified, out.max(1)[1] != y)
-            value_acc_certified = I[acc_certified.nonzero()[:, 0]].tolist()
-            if len(value_acc_certified) > 0:
-                acc_certified_modelid_idx_map[j] = value_acc_certified
+                certified_acc = torch.logical_and(certified, out.max(1)[1] != y)
+            CRA_idxs = I[certified_acc.nonzero()[:, 0]].tolist()
+            if len(CRA_idxs) > 0:
+                CRA_modelid_idx_map[j] = CRA_idxs
             
             if match_y:
-                acc_uncertified = torch.logical_and(uncertified, out.max(1)[1] == y)
+                uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] == y)
             else:
-                acc_uncertified = torch.logical_and(uncertified, out.max(1)[1] != y)
-            value_acc_uncertified = I[acc_uncertified.nonzero()[:, 0]].tolist()
-            if len(value_acc_uncertified) > 0:
-                acc_uncertified_idx += value_acc_uncertified
+                uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] != y)
+            A_idxs += I[uncertified_acc.nonzero()[:, 0]].tolist()
 
             # reduce data set to uncertified examples
             if uncertified.sum() > 0:
@@ -147,13 +146,13 @@ def eval_cascade(config, models, X, y, match_y=True):
             else:
                 torch.cuda.empty_cache()
                 torch.set_grad_enabled(True)
-                return certified_modelid_idx_map, acc_certified_modelid_idx_map, acc_uncertified_idx
+                return CR_modelid_idx_map, CRA_modelid_idx_map, A_idxs
 
         ####################################################################
     torch.cuda.empty_cache()
     torch.set_grad_enabled(True)
 
-    return certified_modelid_idx_map, acc_certified_modelid_idx_map, acc_uncertified_idx
+    return CR_modelid_idx_map, CRA_modelid_idx_map, A_idxs
 
 
 def make_objective_fn(config):
@@ -327,15 +326,29 @@ def attack_step(config, models, data, labels, modelid):
 
 
 def attack(config, loader, models, log):
-    # data_adv = []
+    # data_attackable = []
     dataset_size = 0
-    total_num_robust_accurate = 0
-    total_num_adv_robust_accurate = 0
-    total_num_succ_attack_on_certified = 0
 
-    total_num_accurate_not_robust = 0
-    total_num_succ_attack_on_uncertified = 0
-    total_num_emp_robust_accurate = 0
+    # Number of samples in the dataset where the ensemble is certified robust and accurate
+    total_num_CRA = 0
+
+    # Number of samples in the dataset where the ensemble is certified robust and accurate
+    # but our attack was successful
+    total_num_attackable_CRA = 0
+
+    # Number of samples in the dataset where the ensemble is certified robust and accurate
+    # and our attack was not successful
+    total_num_not_attackable_CRA = 0
+
+    # Number of samples in the dataset where the ensemble is accurate but not certified robust
+    total_num_A = 0
+
+    # Number of samples in the dataset where the ensemble is accurate but not certified robust
+    # and our attack was successful
+    total_num_attackable_A = 0
+
+    # Number of samples in the dataset where the ensemble is accurate and our attack was unsuccessful
+    total_num_ERA = 0
     
     duration = 0
     num_batches = config.data.n_examples // config.data.batch_size
@@ -349,65 +362,67 @@ def attack(config, loader, models, log):
         if label.dim() == 2:
             label = label.squeeze(1)
 
-        # Extract a subset of batch where ensemble is accurate and robust.
-        # Also, get the id of constituent model used to make the prediction
-        # acc_certified_modelid_idx_map is a dictionary mapping from
-        # model_id to the list of batch-level indices of points it certifies accurately.
-        # acc_uncertified_idx is a list of batch-level indices of points that ensemble
-        #  predicts accurately but does not certify.
-        _, acc_certified_modelid_idx_map, acc_uncertified_idx = eval_cascade(config, models, data, label)
+        # CRA_modelid_idx_map is a dictionary mapping from modelid to 
+        # the list of batch-level indices of points where the ensemble uses 
+        # model modelid for prediction and the predictions are certified robust & accurate.
+        # 
+        # A_idx is a list of batch-level indices of points that the ensemble
+        # predicts accurately but cannot certify robustness. Since all such points are predicted using
+        # the last model in the ensemble, we don't need to record the modelid.
+        _, CRA_modelid_idx_map, A_idx = eval_cascade(config, models, data, label)
 
-        # acc_certified_modelid_idx_map is a empty dictionary,
-        # which means no point is both accurate and robust.
-        # Also, acc_uncertified_idx is an empty list,
-        # which means no point is both accurate and not certified robust.
-        if len(acc_certified_modelid_idx_map.keys()) == 0 and len(acc_uncertified_idx) == 0:
+        if len(CRA_modelid_idx_map.keys()) == 0 and len(A_idx) == 0:
+            # CRA_modelid_idx_map is a empty dictionary, which means no point is both certified robust & accurate.
+            # Also, A_idx is an empty list, which means no point is both not certified robust & accurate.
             continue
 
-        num_robust_accurate = 0
-        num_succ_attack_on_certified = 0
-        if len(acc_certified_modelid_idx_map.keys()) != 0:
-            for modelid, idxs in acc_certified_modelid_idx_map.items():
+        num_CRA = 0
+        num_attackable_CRA = 0
+        if len(CRA_modelid_idx_map.keys()) != 0:
+            for modelid, idxs in CRA_modelid_idx_map.items():
 
-                # rc = robust and accurate
-                # We take the subset of batch where ensemble is accurate and robust.
-                rc_data = data[torch.tensor(idxs)]
-                rc_label = label[torch.tensor(idxs)]
+                # CRA = certified robust and accurate
+                # We take the subset of batch where ensemble certified robust and accurate.
+                CRA_data = data[torch.tensor(idxs)]
+                CRA_label = label[torch.tensor(idxs)]
 
-                per_mapping_num_robust_accurate = len(idxs)
-                num_robust_accurate += per_mapping_num_robust_accurate
+                per_mapping_num_CRA = len(idxs)
+                num_CRA += per_mapping_num_CRA
 
-                data_adv_i, is_adv = attack_step(
-                    config, models, Variable(rc_data), Variable(rc_label),
+                data_attackable_CRA, is_attackable_CRA = attack_step(
+                    config, models, Variable(CRA_data), Variable(CRA_label),
                     modelid)
 
-                # data_adv += data_adv_i
-                num_succ_attack_on_certified += len(data_adv_i)
+                # data_attackable += data_attackable_CRA
+                num_attackable_CRA += len(data_attackable_CRA)
         
-        num_accurate_not_robust = 0
-        num_succ_attack_on_uncertified = 0
-        if len(acc_uncertified_idx) != 0:
-            # nc = not robust and accurate
-            # We take the subset of batch where ensemble is accurate and not robust.
-            nc_data = data[torch.tensor(acc_uncertified_idx)]
-            nc_label = label[torch.tensor(acc_uncertified_idx)]
+        num_A = 0
+        num_attackable_A = 0
+        if len(A_idx) != 0:
+            # A = accurate (but not certified robust)
+            # We take the subset of batch where ensemble is accurate but not certified robust.
+            A_data = data[torch.tensor(A_idx)]
+            A_label = label[torch.tensor(A_idx)]
 
-            data_adv_nc, is_adv = attack_step(
-                config, models, Variable(nc_data), Variable(nc_label),
+            num_A += len(A_idx)
+
+            data_attackable_A, is_attackable_A = attack_step(
+                config, models, Variable(A_data), Variable(A_label),
                 len(models)-1)
 
-            # data_adv += data_adv_nc
-            num_succ_attack_on_uncertified += len(data_adv_nc)
+            # data_attackable += data_attackable_A
+            num_attackable_A += len(data_attackable_A)
 
-        num_adv_robust_accurate = num_robust_accurate - num_succ_attack_on_certified
-        total_num_robust_accurate += num_robust_accurate
-        total_num_adv_robust_accurate += num_adv_robust_accurate
-        total_num_succ_attack_on_certified += num_succ_attack_on_certified
+        num_not_attackable_CRA = num_CRA - num_attackable_CRA
+        total_num_CRA += num_CRA
+        total_num_not_attackable_CRA += num_not_attackable_CRA
+        total_num_attackable_CRA += num_attackable_CRA
 
-        num_emp_robust_accurate = (num_robust_accurate + num_accurate_not_robust) - (num_succ_attack_on_certified + num_succ_attack_on_uncertified)
-        total_num_accurate_not_robust += num_accurate_not_robust
-        total_num_succ_attack_on_uncertified += num_succ_attack_on_uncertified
-        total_num_emp_robust_accurate += num_emp_robust_accurate
+        num_ERA = (num_CRA + num_A) \
+            - (num_attackable_CRA + num_attackable_A)
+        total_num_A += num_A
+        total_num_attackable_A += num_attackable_A
+        total_num_ERA += num_ERA
 
         if duration > 0:
             duration = (time() - start) * 0.05 + duration * 0.95
@@ -417,22 +432,25 @@ def attack(config, loader, models, log):
         if config.verbose:
             print(
                 f"Batch {batch_id}/{num_batches}" +
-                f"   |   Ensemble Reported CRA: {num_robust_accurate/config.data.batch_size:.3f} "
+                f"   |   Clean Accuracy: {(num_CRA+num_A)/config.data.batch_size:.3f} "
                 +
-                f"   |   Post Attack CRA: {num_adv_robust_accurate/config.data.batch_size:.3f}"
+                f"   |   Unsound CRA: {num_CRA/config.data.batch_size:.3f} "
                 +
-                f"   |   Attack Success Rate: {num_succ_attack_on_certified/num_robust_accurate:.3f}"
+                f"   |   Post-Attack Unsound CRA: {num_not_attackable_CRA/config.data.batch_size:.3f}"
                 +
-                f"   |   Ensemble ERA: {num_emp_robust_accurate/config.data.batch_size:.3f}"
+                f"   |   Attackable Certificate Ratio: {num_attackable_CRA/num_CRA:.3f}"
+                +
+                f"   |   ERA: {num_ERA/config.data.batch_size:.3f}"
                 +
                 f"   |   ETA: {0.0167 * duration * (num_batches - batch_id - 1):.1f} min"
             )
 
     print("Num inputs: ", dataset_size)
-    print("Ensemble Reported CRA: ", total_num_robust_accurate / dataset_size)
-    print("Post Attack CRA: ", total_num_adv_robust_accurate / dataset_size)
-    print("Attack Success Rate: ", total_num_succ_attack_on_certified / total_num_robust_accurate)
-    print("Ensemble CRA: ", total_num_emp_robust_accurate / dataset_size)
+    print("Clean Accuracy: ", (total_num_CRA + total_num_A) / dataset_size)
+    print("Unsound CRA: ", total_num_CRA / dataset_size)
+    print("Post-Attack Unsound CRA: ", total_num_not_attackable_CRA / dataset_size)
+    print("Attackable Certificate Ratio: ", total_num_attackable_CRA / total_num_CRA)
+    print("ERA: ", total_num_ERA / dataset_size)
     return
 
 
