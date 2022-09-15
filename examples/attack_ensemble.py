@@ -155,8 +155,32 @@ def eval_cascade(config, models, X, y, match_y=True):
     return CR_modelid_idx_map, CRA_modelid_idx_map, A_idxs
 
 
-def make_objective_fn(config):
-    if not config.attack.do_surrogate:
+def make_objective_fn(config, cert_needed=True):
+    if not cert_needed:
+        def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
+
+            loss_cert = -1 * sparse_cross_entropy(
+                p_logits=model(X_pgd), q_sparse=y_pred, reduction='none')
+            # for all model i < j, they should fail to certify the current input
+            loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
+            for k in range(j):
+
+                output_k = all_models[k](X_pgd)
+
+                # To make model i, i<j, fail to certify the input,
+                # we push the adversarial point closer to the decision boundary
+                # by minimizing the KL divergence betweent its class probability
+                # distribution and a uniform distribution.
+                unif_dist = torch.ones(output_k.size()).type_as(
+                    output_k.data) / float(
+                        output_k.size(1))
+                loss_nocert += cross_entropy(p_logits=output_k,
+                                             q_probits=unif_dist, reduction='none')
+            return loss_cert + loss_nocert
+            
+
+
+    elif not config.attack.do_surrogate:
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
             # for model j, we encourage it to certify the current input.
@@ -208,9 +232,9 @@ def make_objective_fn(config):
 
     return objective_fn
 
-
 def attack_step(config, models, data, labels, modelid):
 
+    last_modelid = len(models) - 1
     data_clone = torch.clone(data)
     labels_clone = torch.clone(labels)
 
@@ -238,21 +262,27 @@ def attack_step(config, models, data, labels, modelid):
 
     for j, model in enumerate(models):
 
-        # if model j is the one that makes the clean prediction,
-        # we skip it
-        if j == modelid:
-            continue
+        if j == last_modelid:
+            attack_objective_fn = make_objective_fn(config, cert_needed=False)
+        else:
+            # if model j is the one that makes the clean prediction,
+            # we skip it
+            if j == modelid:
+                continue
 
         # The predicted label of model j
         y_pred = model(data_clone).max(1)[1]
 
-        # We are only interested in models that already make different predicitons
-        # from the previous certifier, i.e. the first model that cerfifies its prediciton
-        # for the clean input, because if model j makes the same prediciton as the
-        # certifier (model modelid), it is impossible to find an adversarial point within the eps-ball
-        # that outputs a different label with certificate.
-        candidates = torch.logical_and((y_pred != labels_clone), keep_attack)
-        candidates = candidates.nonzero().squeeze(1)
+        if j == last_modelid:
+            candidates = keep_attack.nonzero().squeeze(1)
+        else:
+            # We are only interested in models that already make different predicitons
+            # from the previous certifier, i.e. the first model that cerfifies its prediciton
+            # for the clean input, because if model j makes the same prediciton as the
+            # certifier (model modelid), it is impossible to find an adversarial point within the eps-ball
+            # that outputs a different label with certificate.
+            candidates = torch.logical_and((y_pred != labels_clone), keep_attack)
+            candidates = candidates.nonzero().squeeze(1)
 
         # If there is no candidate, we skip this model j.
         if len(candidates) < 1:
@@ -279,7 +309,8 @@ def attack_step(config, models, data, labels, modelid):
                 eta = config.attack.step_size * data_pgd.grad.data.sign()
                 data_pgd = Variable(data_pgd.data + eta, requires_grad=True)
                 eta = torch.clamp(data_pgd.data - data_candidates, -eps, eps)
-                data_pgd.data = data_candidates + eta * candidate_keep_attack.view(-1, 1, 1, 1)
+                # data_pgd.data = data_candidates + eta * candidate_keep_attack.view(-1, 1, 1, 1)
+                data_pgd.data = data_candidates + eta
 
             elif config.attack.norm == 'l2':
                 # l_2 PGD
@@ -301,25 +332,31 @@ def attack_step(config, models, data, labels, modelid):
 
                 delta *= eps / scaling_factor.view(-1, 1, 1, 1)
 
-                data_pgd.data = data_candidates + delta * candidate_keep_attack.view(-1, 1, 1, 1)
+                # data_pgd.data = data_candidates + delta * candidate_keep_attack.view(-1, 1, 1, 1)
+                data_pgd.data = data_candidates + delta
 
             # Clip the input to a valid data range.
             data_pgd.data = torch.clamp(data_pgd.data, data_min, data_max)
 
         # Check whether the model is certifiably robust on a different label after the attack.
-        _, acc_certified_modelid_idx_map, _ = eval_cascade(
+        _, CRA_modelid_idx_map, A_idxs = eval_cascade(
             config, models, data_pgd, candidate_labels, match_y=False)
-        acc_certified_idxs = []
+        CRA_idxs = []
 
-        for _, idxs in acc_certified_modelid_idx_map.items():
-            acc_certified_idxs += idxs
+        for _, idxs in CRA_modelid_idx_map.items():
+            CRA_idxs += idxs
 
-        if acc_certified_idxs:
+        if CRA_idxs:
             # If we have found an adversarial example for an input, we stop the attack.
-            candidate_keep_attack[torch.tensor(acc_certified_idxs)] = 0
+            candidate_keep_attack[torch.tensor(CRA_idxs)] = 0
+
+        if j == last_modelid and A_idxs:
+            # If we have found an adversarial example for an input, we stop the attack.
+            candidate_keep_attack[torch.tensor(A_idxs)] = 0
 
         keep_attack[candidates] = torch.minimum(candidate_keep_attack, keep_attack[candidates])
 
+    #TODO: fix such that noisy data contains the perturbed inputs
     noisy_data = data[keep_attack == 0]
 
     return noisy_data, 1 - keep_attack
