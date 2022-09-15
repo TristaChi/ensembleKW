@@ -26,7 +26,7 @@ def get_config():
     config.attack.eps = 0.1
     config.attack.steps = 100
     config.attack.step_size = 0.01
-    config.attack.do_surrogate = False
+    config.attack.do_surrogate = True
     config.attack.bounded_input = False
 
     return config
