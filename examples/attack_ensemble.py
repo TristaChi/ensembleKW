@@ -142,14 +142,13 @@ def eval_cascade(config, models, X, y, match_y=True):
             CRA_idxs = I[certified_acc.nonzero()[:, 0]].tolist()
             if len(CRA_idxs) > 0:
                 CRA_modelid_idx_map[j] = CRA_idxs
-
-            if match_y:
-                uncertified_acc = torch.logical_and(uncertified,
-                                                    out.max(1)[1] == y)
-            else:
-                uncertified_acc = torch.logical_and(uncertified,
-                                                    out.max(1)[1] != y)
-            A_idxs += I[uncertified_acc.nonzero()[:, 0]].tolist()
+            
+            if j == len(models) - 1:
+                if match_y:
+                    uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] == y)
+                else:
+                    uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] != y)
+                A_idxs += I[uncertified_acc.nonzero()[:, 0]].tolist()
 
             # reduce data set to uncertified examples
             if uncertified.sum() > 0:
