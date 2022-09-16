@@ -121,7 +121,9 @@ def eval_cascade(config, models, X, y, match_y=True):
                                      eps,
                                      X,
                                      out.max(1)[1],
-                                     size_average=False)
+                                     size_average=False,
+                                     device_ids=[0, 1],
+                                     parallel=True)
 
         certified = ~uncertified
 
