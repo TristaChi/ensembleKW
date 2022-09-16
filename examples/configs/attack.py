@@ -11,7 +11,7 @@ def get_config():
     config.data.dataset = 'mnist'
     config.data.n_examples = 10000
     config.data.normalization = '01'
-    config.data.batch_size = 8
+    config.data.batch_size = 256
 
     config.io = ml_collections.ConfigDict()
     config.io.output_file = 'attack_op'
@@ -25,7 +25,7 @@ def get_config():
     config.attack.opt = 'sgd'
     config.attack.eps = 0.1
     config.attack.steps = 100
-    config.attack.step_size = 0.01
+    config.attack.step_size = 0.004
     config.attack.do_surrogate = True
     config.attack.bounded_input = False
 
