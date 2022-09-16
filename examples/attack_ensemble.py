@@ -1,4 +1,3 @@
-
 import random
 
 import numpy as np
@@ -14,13 +13,20 @@ from torch.autograd import Variable
 
 import problems as pblm
 from convex_adversarial import RobustBounds, robust_loss, robust_loss_parallel
-from trainer import * # pylint: disable=import-error
-from time import time # pylint: disable=import-error
+from trainer import *  # pylint: disable=import-error
+from time import time  # pylint: disable=import-error
+
+from dbify import dbify
+from flatten_dict import flatten as tree_flatten
 
 cudnn.benchmark = True
 
-device = 'cpu'
+device = 'cuda:0'
 
+
+@dbify('ensemblekw', 'attack')
+def store_experiement(**kwargs):
+    return {}
 
 
 def select_mnist_model(m):
@@ -54,7 +60,7 @@ def cross_entropy(*, p_logits, q_probits, reduction='mean'):
     """
     logprobs = torch.nn.functional.log_softmax(p_logits.view(
         p_logits.shape[0], -1),
-        dim=1)
+                                               dim=1)
     batchloss = -torch.sum(q_probits.view(q_probits.shape[0], -1) * logprobs,
                            dim=1)
     if reduction == 'none':
@@ -68,12 +74,15 @@ def cross_entropy(*, p_logits, q_probits, reduction='mean'):
         raise NotImplementedError('Unsupported reduction mode.')
 
 
-def sparse_cross_entropy(*,  p_logits, q_sparse, reduction='mean'):
+def sparse_cross_entropy(*, p_logits, q_sparse, reduction='mean'):
     num_classes = p_logits.shape[1]
     q_probits = torch.nn.functional.one_hot(q_sparse, num_classes=num_classes)
-    return cross_entropy(p_logits=p_logits, q_probits=q_probits, reduction=reduction)
+    return cross_entropy(p_logits=p_logits,
+                         q_probits=q_probits,
+                         reduction=reduction)
 
-# Evaluates the casacade given data X and labels y. 
+
+# Evaluates the casacade given data X and labels y.
 # match_y=True if the predictions of cascade count as accurate when they match label y,
 # while match_y=False if the predictions of cascade count as accurate when they do not match label y
 def eval_cascade(config, models, X, y, match_y=True):
@@ -98,7 +107,7 @@ def eval_cascade(config, models, X, y, match_y=True):
     CRA_modelid_idx_map = {}
 
     # List of indices of elements in X where ensemble predictions are accurate but not certified robust.
-    # Since all such predictions are made by the last model in the ensemble, we do not need to record the modelid. 
+    # Since all such predictions are made by the last model in the ensemble, we do not need to record the modelid.
     A_idxs = []
 
     for j, model in enumerate(models):
@@ -125,17 +134,21 @@ def eval_cascade(config, models, X, y, match_y=True):
                 CR_modelid_idx_map[j] = CR_idxs
 
             if match_y:
-                certified_acc = torch.logical_and(certified, out.max(1)[1] == y)
+                certified_acc = torch.logical_and(certified,
+                                                  out.max(1)[1] == y)
             else:
-                certified_acc = torch.logical_and(certified, out.max(1)[1] != y)
+                certified_acc = torch.logical_and(certified,
+                                                  out.max(1)[1] != y)
             CRA_idxs = I[certified_acc.nonzero()[:, 0]].tolist()
             if len(CRA_idxs) > 0:
                 CRA_modelid_idx_map[j] = CRA_idxs
-            
+
             if match_y:
-                uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] == y)
+                uncertified_acc = torch.logical_and(uncertified,
+                                                    out.max(1)[1] == y)
             else:
-                uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] != y)
+                uncertified_acc = torch.logical_and(uncertified,
+                                                    out.max(1)[1] != y)
             A_idxs += I[uncertified_acc.nonzero()[:, 0]].tolist()
 
             # reduce data set to uncertified examples
@@ -157,11 +170,13 @@ def eval_cascade(config, models, X, y, match_y=True):
 
 def make_objective_fn(config, cert_needed=True):
     if not cert_needed:
+
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
             # for model j, we encourage it to have a different prediction at the current input.
-            loss_cert = sparse_cross_entropy(
-                p_logits=model(X_pgd), q_sparse=y_pred, reduction='none')
+            loss_cert = sparse_cross_entropy(p_logits=model(X_pgd),
+                                             q_sparse=y_pred,
+                                             reduction='none')
 
             # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
@@ -174,15 +189,14 @@ def make_objective_fn(config, cert_needed=True):
                 # by minimizing the KL divergence betweent its class probability
                 # distribution and a uniform distribution.
                 unif_dist = torch.ones(output_k.size()).type_as(
-                    output_k.data) / float(
-                        output_k.size(1))
+                    output_k.data) / float(output_k.size(1))
                 loss_nocert += cross_entropy(p_logits=output_k,
-                                             q_probits=unif_dist, reduction='none')
+                                             q_probits=unif_dist,
+                                             reduction='none')
             return loss_cert - loss_nocert
-            
-
 
     elif not config.attack.do_surrogate:
+
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
             # for model j, we encourage it to certify the current input.
@@ -195,8 +209,8 @@ def make_objective_fn(config, cert_needed=True):
             # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
             for k in range(j):
-                worse_case_logit_k = RobustBounds(all_models[k],
-                                                  eps)(X_pgd, y_pred)
+                worse_case_logit_k = RobustBounds(all_models[k], eps)(X_pgd,
+                                                                      y_pred)
 
                 # To make model i, i<j, fail to certify the input,
                 # we push the adversarial point closer to the decision boundary
@@ -211,11 +225,13 @@ def make_objective_fn(config, cert_needed=True):
 
             return -loss_cert - loss_nocert
     else:
+
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
             # for model j, we encourage it to certify the current input.
-            loss_cert = sparse_cross_entropy(
-                p_logits=model(X_pgd), q_sparse=y_pred, reduction='none')
+            loss_cert = sparse_cross_entropy(p_logits=model(X_pgd),
+                                             q_sparse=y_pred,
+                                             reduction='none')
 
             # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
@@ -228,13 +244,14 @@ def make_objective_fn(config, cert_needed=True):
                 # by minimizing the KL divergence betweent its class probability
                 # distribution and a uniform distribution.
                 unif_dist = torch.ones(output_k.size()).type_as(
-                    output_k.data) / float(
-                        output_k.size(1))
+                    output_k.data) / float(output_k.size(1))
                 loss_nocert += cross_entropy(p_logits=output_k,
-                                             q_probits=unif_dist, reduction='none')
+                                             q_probits=unif_dist,
+                                             reduction='none')
             return -loss_cert - loss_nocert
 
     return objective_fn
+
 
 def attack_step(config, models, data, labels, modelid):
 
@@ -243,7 +260,8 @@ def attack_step(config, models, data, labels, modelid):
     labels_clone = torch.clone(labels)
 
     noisy_data = []
-    idx_for_all_data = torch.arange(data_clone.size(0)).type_as(labels_clone.data)
+    idx_for_all_data = torch.arange(data_clone.size(0)).type_as(
+        labels_clone.data)
 
     if config.data.normalization == '01':
         eps = config.attack.eps
@@ -285,7 +303,8 @@ def attack_step(config, models, data, labels, modelid):
             # for the clean input, because if model j makes the same prediciton as the
             # certifier (model modelid), it is impossible to find an adversarial point within the eps-ball
             # that outputs a different label with certificate.
-            candidates = torch.logical_and((y_pred != labels_clone), keep_attack)
+            candidates = torch.logical_and((y_pred != labels_clone),
+                                           keep_attack)
             candidates = candidates.nonzero().squeeze(1)
 
         # If there is no candidate, we skip this model j.
@@ -305,7 +324,8 @@ def attack_step(config, models, data, labels, modelid):
             # TODO add Adam optimizer
             # opt_pgd = optim.Adam([X_pgd], lr=config.attack.step_size)
 
-            loss = attack_objective_fn(j, model, models, eps, data_pgd, candidate_pred)
+            loss = attack_objective_fn(j, model, models, eps, data_pgd,
+                                       candidate_pred)
             loss.mean().backward()
 
             if config.attack.norm == 'linf':
@@ -320,18 +340,20 @@ def attack_step(config, models, data, labels, modelid):
                 # l_2 PGD
                 # Assumes X_candidates and X_pgd are batched tensors where the first dimension is
                 # a batch dimension, i.e., .view() assumes batched images as a 4D Tensor
-                grad_norms = torch.linalg.norm(
-                    data_pgd.grad.view(data_pgd.shape[0], -1), dim=1)
+                grad_norms = torch.linalg.norm(data_pgd.grad.view(
+                    data_pgd.shape[0], -1),
+                                               dim=1)
                 eta = config.attack.step_size * \
                     data_pgd.grad / grad_norms.view(-1, 1, 1, 1)
                 data_pgd = Variable(data_pgd.data + eta, requires_grad=True)
                 delta = data_pgd.data - data_candidates
 
-                mask = torch.linalg.norm(delta.view(
-                    delta.shape[0], -1), dim=1) <= eps
+                mask = torch.linalg.norm(delta.view(delta.shape[0], -1),
+                                         dim=1) <= eps
 
-                scaling_factor = torch.linalg.norm(
-                    delta.view(delta.shape[0], -1), dim=1)
+                scaling_factor = torch.linalg.norm(delta.view(
+                    delta.shape[0], -1),
+                                                   dim=1)
                 scaling_factor[mask] = eps
 
                 delta *= eps / scaling_factor.view(-1, 1, 1, 1)
@@ -343,8 +365,11 @@ def attack_step(config, models, data, labels, modelid):
             data_pgd.data = torch.clamp(data_pgd.data, data_min, data_max)
 
         # Check whether the model is certifiably robust on a different label after the attack.
-        _, CRA_modelid_idx_map, A_idxs = eval_cascade(
-            config, models, data_pgd, candidate_labels, match_y=False)
+        _, CRA_modelid_idx_map, A_idxs = eval_cascade(config,
+                                                      models,
+                                                      data_pgd,
+                                                      candidate_labels,
+                                                      match_y=False)
         CRA_idxs = []
 
         for _, idxs in CRA_modelid_idx_map.items():
@@ -358,7 +383,8 @@ def attack_step(config, models, data, labels, modelid):
             # If we have found an adversarial example for an input, we stop the attack.
             candidate_keep_attack[torch.tensor(A_idxs)] = 0
 
-        keep_attack[candidates] = torch.minimum(candidate_keep_attack, keep_attack[candidates])
+        keep_attack[candidates] = torch.minimum(candidate_keep_attack,
+                                                keep_attack[candidates])
 
     #TODO: fix such that noisy data contains the perturbed inputs
     noisy_data = data[keep_attack == 0]
@@ -390,7 +416,7 @@ def attack(config, loader, models, log):
 
     # Number of samples in the dataset where the ensemble is accurate and our attack was unsuccessful
     total_num_ERA = 0
-    
+
     duration = 0
     num_batches = config.data.n_examples // config.data.batch_size
 
@@ -403,14 +429,15 @@ def attack(config, loader, models, log):
         if label.dim() == 2:
             label = label.squeeze(1)
 
-        # CRA_modelid_idx_map is a dictionary mapping from modelid to 
-        # the list of batch-level indices of points where the ensemble uses 
+        # CRA_modelid_idx_map is a dictionary mapping from modelid to
+        # the list of batch-level indices of points where the ensemble uses
         # model modelid for prediction and the predictions are certified robust & accurate.
-        # 
+        #
         # A_idx is a list of batch-level indices of points that the ensemble
         # predicts accurately but cannot certify robustness. Since all such points are predicted using
         # the last model in the ensemble, we don't need to record the modelid.
-        _, CRA_modelid_idx_map, A_idx = eval_cascade(config, models, data, label)
+        _, CRA_modelid_idx_map, A_idx = eval_cascade(config, models, data,
+                                                     label)
 
         if len(CRA_modelid_idx_map.keys()) == 0 and len(A_idx) == 0:
             # CRA_modelid_idx_map is a empty dictionary, which means no point is both certified robust & accurate.
@@ -436,7 +463,7 @@ def attack(config, loader, models, log):
 
                 # data_attackable += data_attackable_CRA
                 num_attackable_CRA += len(data_attackable_CRA)
-        
+
         num_A = 0
         num_attackable_A = 0
         if len(A_idx) != 0:
@@ -449,7 +476,7 @@ def attack(config, loader, models, log):
 
             data_attackable_A, is_attackable_A = attack_step(
                 config, models, Variable(A_data), Variable(A_label),
-                len(models)-1)
+                len(models) - 1)
 
             # data_attackable += data_attackable_A
             num_attackable_A += len(data_attackable_A)
@@ -475,23 +502,36 @@ def attack(config, loader, models, log):
                 f"Batch {batch_id}/{num_batches}" +
                 f"   |   Clean Accuracy: {(num_CRA+num_A)/config.data.batch_size:.3f} "
                 +
-                f"   |   Unsound CRA: {num_CRA/config.data.batch_size:.3f} "
-                +
+                f"   |   Unsound CRA: {num_CRA/config.data.batch_size:.3f} " +
                 f"   |   Post-Attack Unsound CRA: {num_not_attackable_CRA/config.data.batch_size:.3f}"
                 +
                 f"   |   Attackable Certificate Ratio: {num_attackable_CRA/num_CRA:.3f}"
-                +
-                f"   |   ERA: {num_ERA/config.data.batch_size:.3f}"
-                +
+                + f"   |   ERA: {num_ERA/config.data.batch_size:.3f}" +
                 f"   |   ETA: {0.0167 * duration * (num_batches - batch_id - 1):.1f} min"
             )
+
+    metrics = {
+        "acc": float((total_num_CRA + total_num_A) / dataset_size),
+        "pre_unsound_cra": float(total_num_CRA / dataset_size),
+        "post_unsound_cra": float(total_num_not_attackable_CRA / dataset_size),
+        "attackable_cra": float(total_num_attackable_CRA / total_num_CRA),
+        "era": float(total_num_ERA / dataset_size),
+    }
 
     print("Num inputs: ", dataset_size)
     print("Clean Accuracy: ", (total_num_CRA + total_num_A) / dataset_size)
     print("Unsound CRA: ", total_num_CRA / dataset_size)
-    print("Post-Attack Unsound CRA: ", total_num_not_attackable_CRA / dataset_size)
-    print("Attackable Certificate Ratio: ", total_num_attackable_CRA / total_num_CRA)
+    print("Post-Attack Unsound CRA: ",
+          total_num_not_attackable_CRA / dataset_size)
+    print("Attackable Certificate Ratio: ",
+          total_num_attackable_CRA / total_num_CRA)
     print("ERA: ", total_num_ERA / dataset_size)
+
+    flat_config = tree_flatten(config.to_dict(), reducer='underscore')
+    flat_config.update(metrics)
+
+    store_experiement(**flat_config)
+
     return
 
 
