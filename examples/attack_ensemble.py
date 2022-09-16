@@ -378,7 +378,7 @@ def attack_step(config, models, data, labels, modelid):
             # If we have found an adversarial example for an input, we stop the attack.
             candidate_keep_attack[torch.tensor(CRA_idxs)] = 0
 
-        if j == last_modelid and A_idxs:
+        if A_idxs:
             # If we have found an adversarial example for an input, we stop the attack.
             candidate_keep_attack[torch.tensor(A_idxs)] = 0
 
