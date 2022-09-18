@@ -498,6 +498,9 @@ def attack(config, loader, models, log):
         else:
             duration = time() - start
 
+        # avoid devide-by-zero error.
+        num_CRA += 1e-6
+
         if config.verbose:
             print(
                 f"Batch {batch_id}/{num_batches}" +
