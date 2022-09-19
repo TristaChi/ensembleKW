@@ -117,21 +117,25 @@ def eval_cascade(config, models, X, y, match_y=True):
 
         out = model(X)
 
-        _, uncertified = robust_loss(model,
-                                     eps,
-                                     X,
-                                     out.max(1)[1],
-                                     size_average=False,
-                                     device_ids=[0, 1],
-                                     parallel=True)
+        _, uncertified = robust_loss(
+            model,
+            eps,
+            X,
+            out.max(1)[1],
+            size_average=False,
+            device_ids=[0, 1],
+            parallel=True,
+            norm_type='l1' if config.attack.norm == 'linf' else 'l2')
 
         certified = ~uncertified
 
         if j == len(models) - 1:
             if match_y:
-                uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] == y)
+                uncertified_acc = torch.logical_and(uncertified,
+                                                    out.max(1)[1] == y)
             else:
-                uncertified_acc = torch.logical_and(uncertified, out.max(1)[1] != y)
+                uncertified_acc = torch.logical_and(uncertified,
+                                                    out.max(1)[1] != y)
             A_idxs += I[uncertified_acc.nonzero()[:, 0]].tolist()
 
         if certified.sum() == 0:
@@ -201,11 +205,15 @@ def make_objective_fn(config, cert_needed=True):
         def objective_fn(j, model, all_models, eps, X_pgd, y_pred):
 
             # for model j, we encourage it to certify the current input.
-            loss_cert, _ = robust_loss(model,
-                                       eps,
-                                       X_pgd,
-                                       y_pred,
-                                       size_average=False)
+            loss_cert, _ = robust_loss(
+                model,
+                eps,
+                X_pgd,
+                y_pred,
+                size_average=False,
+                device_ids=[0, 1],
+                parallel=True,
+                norm_type='l1' if config.attack.norm == 'linf' else 'l2')
 
             # for all model i < j, they should fail to certify the current input.
             loss_nocert = torch.zeros(loss_cert.size()).type_as(loss_cert.data)
@@ -499,7 +507,7 @@ def attack(config, loader, models, log):
             duration = time() - start
 
         # avoid devide-by-zero error.
-        num_CRA += 1e-6
+        num_CRA += 1e-16
 
         if config.verbose:
             print(
@@ -513,7 +521,8 @@ def attack(config, loader, models, log):
                 + f"   |   ERA: {num_ERA/config.data.batch_size:.3f}" +
                 f"   |   ETA: {0.0167 * duration * (num_batches - batch_id - 1):.1f} min"
             )
-
+    # avoid devide-by-zero error.
+    total_num_CRA += 1e-16
     metrics = {
         "acc": float((total_num_CRA + total_num_A) / dataset_size),
         "pre_unsound_cra": float(total_num_CRA / dataset_size),
