@@ -333,6 +333,12 @@ def attack_step(config, models, data, labels, modelid):
             # TODO add Adam optimizer
             # opt_pgd = optim.Adam([X_pgd], lr=config.attack.step_size)
 
+            # if j == last_modelid:
+            #     loss = attack_objective_fn(j, model, models, eps, data_pgd,
+            #                            candidate_labels)
+            # else:
+            #     loss = attack_objective_fn(j, model, models, eps, data_pgd,
+            #                            candidate_pred)
             loss = attack_objective_fn(j, model, models, eps, data_pgd,
                                        candidate_pred)
             loss.mean().backward()
