@@ -130,7 +130,7 @@ def robust_loss(net,
                 y,
                 size_average=True,
                 device_ids=None,
-                parallel=True,
+                parallel=False,
                 return_certificate=False,
                 **kwargs):
     reduction = 'mean' if size_average else 'none'

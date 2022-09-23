@@ -127,7 +127,7 @@ cp evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_0_test evalD
 # model_type=small or model_type=large
 eps=158
 model_type=large
-norm=l1
+norm=l2
 model="models/seq_trained/l_2/mnist_${model_type}.pth"
 output="evalData/seq_trained/l_2/mnist_${model_type}/mnist_${model_type}_"
 python examples/evaluate.py \
@@ -146,7 +146,7 @@ python examples/evaluate.py \
 # run with id=1 and id=2 to evaluate two constituent models
 eps=158
 model_type=small
-norm=l1
+norm=l2
 id=1
 model="models/non_seq_trained/l_2/more_mnist_${model_type}_${id}.pth"
 output="evalData/non_seq_trained/l_2/mnist_${model_type}/more_mnist_${model_type}_${id}"
@@ -213,6 +213,26 @@ python examples/evaluate.py \
 cp evalData/seq_trained/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_train evalData/non_seq_trained/l_inf/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_train
 cp evalData/seq_trained/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_test evalData/non_seq_trained/l_inf/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_test
 
+# cifar ResNet epspx=2,8, sequentially trained
+# epspx=2 or epspx=8
+epspx=2
+model_type=resnet
+norm=l1
+model="models/seq_trained/l_inf/cifar_${model_type}_${epspx}px.pth"
+output="evalData/seq_trained/l_inf/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+eps=0.0348 # epspx=2
+# eps=0.139 # epspx=8
+python examples/evaluate.py \
+    --model ${model_type} \
+    --epsilon  ${eps} \
+    --proj 50 \
+    --norm ${norm} \
+    --dataset cifar \
+    --load ${model} \
+    --output ${output} \
+    --verbose 100 \
+    --cuda_ids 0,1 \
+> ${output}.log 
 ############################################## CIFAR l2 ##################################################
 # cifar small, large, sequentially trained
 # model_type=small or model_type=large
@@ -257,3 +277,21 @@ python examples/evaluate.py \
 cp evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_train evalData/non_seq_trained/l_2/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_train
 cp evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_0_test evalData/non_seq_trained/l_2/cifar_${model_type}_${epspx}px/more_cifar_${model_type}_${epspx}px_0_test
 
+# cifar ResNet epspx=36, sequentially trained
+epspx=36
+model_type=resnet
+norm=l2
+model="models/seq_trained/l_2/cifar_${model_type}_${epspx}px.pth"
+output="evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
+eps=0.157 # l2
+python examples/evaluate.py \
+    --model ${model_type} \
+    --epsilon  ${eps} \
+    --proj 50 \
+    --norm ${norm} \
+    --dataset cifar \
+    --load ${model} \
+    --output ${output} \
+    --verbose 100 \
+    --cuda_ids 0,1 \
+> ${output}.log 

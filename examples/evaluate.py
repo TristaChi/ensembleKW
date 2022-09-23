@@ -84,11 +84,13 @@ if __name__ == "__main__":
     print("saving file to {}".format(args.output))
     setproctitle.setproctitle(args.output)
 
+    kwargs = pblm.args2kwargs(args)
+
     if args.dataset == "mnist":
-        train_loader, test_loader = pblm.mnist_loaders(1)
+        train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
         select_model = select_mnist_model
     elif args.dataset == "cifar":
-        train_loader, test_loader = pblm.cifar_loaders(1)
+        train_loader, test_loader = pblm.cifar_loaders(args.batch_size)
         select_model = select_cifar_model
 
     d = torch.load(args.load)
@@ -115,7 +117,7 @@ if __name__ == "__main__":
 
         err = evaluate_robustness(train_loader, model,
             args.epsilon, 0, train_log, args.verbose,
-            norm_type=args.norm, bounded_input=False, proj=args.proj)
+            norm_type=args.norm, bounded_input=False, **kwargs)
         err = evaluate_robustness(test_loader, model,
             args.epsilon, 0, test_log, args.verbose,
-            norm_type=args.norm, bounded_input=False, proj=args.proj)
+            norm_type=args.norm, bounded_input=False, **kwargs)
