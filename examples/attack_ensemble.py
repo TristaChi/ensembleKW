@@ -23,8 +23,11 @@ cudnn.benchmark = True
 
 device = 'cuda:0'
 
+cifar_mean = [0.485, 0.456, 0.406]
+cifar_std = [0.225, 0.225, 0.225]
 
-@dbify('ensemblekw', 'attack')
+
+@dbify('ensemblekw', 'algorithm')
 def store_experiement(**kwargs):
     return {}
 
@@ -88,11 +91,17 @@ def sparse_cross_entropy(*, p_logits, q_sparse, reduction='mean'):
 def eval_cascade(config, models, X, y, match_y=True):
     if config.data.normalization == '01':
         eps = config.attack.eps
+
     elif config.data.normalization == '-11':
         eps = 2 * config.attack.eps
+
+    elif config.data.normalization == 'meanstd':
+
+        eps = config.attack.eps / cifar_std[0]
+
     else:
         raise ValueError(
-            f"The range of the data {config.data.normalization} is not understood."
+            f"The range of the data `{config.data.normalization}` is not understood."
         )
 
     torch.set_grad_enabled(False)
@@ -280,10 +289,37 @@ def attack_step(config, models, data, labels, modelid):
         eps = 2 * config.attack.eps
         data_min = -1.
         data_max = 1.
+    elif config.data.normalization == 'meanstd':
+        data_shape = data.shape[2:]
+        r_channel_min = (torch.zeros(data_shape) -
+                         cifar_mean[0]) / cifar_std[0]
+        r_channel_max = (torch.zeros(data_shape) +
+                         cifar_mean[0]) / cifar_std[0]
+        g_channel_min = (torch.zeros(data_shape) -
+                         cifar_mean[1]) / cifar_std[1]
+        g_channel_max = (torch.zeros(data_shape) +
+                         cifar_mean[1]) / cifar_std[1]
+        b_channel_min = (torch.zeros(data_shape) -
+                         cifar_mean[2]) / cifar_std[2]
+        b_channel_max = (torch.zeros(data_shape) +
+                         cifar_mean[2]) / cifar_std[2]
+        data_min = torch.stack([r_channel_min, g_channel_min, b_channel_min],
+                               dim=0).to(device)
+        data_max = torch.stack([r_channel_max, g_channel_max, b_channel_max],
+                               dim=0).to(device)
+        eps = config.attack.eps / cifar_std[0]
+
     else:
         raise ValueError(
-            f"The range of the data {config.data.normalization} is not understood."
+            f"The range of the data `{config.data.normalization}` is not understood."
         )
+
+    def smart_clamp(data_to_clip):
+        if isinstance(data_max, float):
+            return torch.clamp(data_to_clip, data_min, data_max)
+        else:
+            return torch.max(torch.min(data_to_clip, data_max[None]),
+                             data_min[None])
 
     attack_objective_fn = make_objective_fn(config)
 
@@ -377,7 +413,7 @@ def attack_step(config, models, data, labels, modelid):
                 data_pgd.data = data_candidates + delta
 
             # Clip the input to a valid data range.
-            data_pgd.data = torch.clamp(data_pgd.data, data_min, data_max)
+            data_pgd.data = smart_clamp(data_pgd.data)
 
         # Check whether the model is certifiably robust on a different label after the attack.
         _, CRA_modelid_idx_map, A_idxs = eval_cascade(config,
@@ -436,7 +472,6 @@ def attack(config, loader, models, log):
     num_batches = config.data.n_examples // config.data.batch_size
 
     for batch_id, (data, label) in enumerate(loader):
-
         start = time()
 
         dataset_size += data.size(0)
