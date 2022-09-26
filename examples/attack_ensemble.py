@@ -27,7 +27,7 @@ cifar_mean = [0.485, 0.456, 0.406]
 cifar_std = [0.225, 0.225, 0.225]
 
 
-@dbify('ensemblekw', 'algorithm')
+@dbify('ensemblekw', 'cifar')
 def store_experiement(**kwargs):
     return {}
 
@@ -285,10 +285,12 @@ def attack_step(config, models, data, labels, modelid):
         eps = config.attack.eps
         data_min = 0.
         data_max = 1.
+        step_size = config.attack.step_size
     elif config.data.normalization == '-11':
         eps = 2 * config.attack.eps
         data_min = -1.
         data_max = 1.
+        step_size = 2 * config.attack.step_size
     elif config.data.normalization == 'meanstd':
         data_shape = data.shape[2:]
         r_channel_min = (torch.zeros(data_shape) -
@@ -308,6 +310,7 @@ def attack_step(config, models, data, labels, modelid):
         data_max = torch.stack([r_channel_max, g_channel_max, b_channel_max],
                                dim=0).to(device)
         eps = config.attack.eps / cifar_std[0]
+        step_size = config.attack.step_size / cifar_std[0]
 
     else:
         raise ValueError(
@@ -381,7 +384,7 @@ def attack_step(config, models, data, labels, modelid):
 
             if config.attack.norm == 'linf':
                 # l_inf PGD
-                eta = config.attack.step_size * data_pgd.grad.data.sign()
+                eta = step_size * data_pgd.grad.data.sign()
                 data_pgd = Variable(data_pgd.data + eta, requires_grad=True)
                 eta = torch.clamp(data_pgd.data - data_candidates, -eps, eps)
                 # data_pgd.data = data_candidates + eta * candidate_keep_attack.view(-1, 1, 1, 1)
@@ -394,7 +397,7 @@ def attack_step(config, models, data, labels, modelid):
                 grad_norms = torch.linalg.norm(data_pgd.grad.view(
                     data_pgd.shape[0], -1),
                                                dim=1)
-                eta = config.attack.step_size * \
+                eta = step_size * \
                     data_pgd.grad / grad_norms.view(-1, 1, 1, 1)
                 data_pgd = Variable(data_pgd.data + eta, requires_grad=True)
                 delta = data_pgd.data - data_candidates
