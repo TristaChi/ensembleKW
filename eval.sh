@@ -250,8 +250,7 @@ python examples/evaluate.py \
     --dataset cifar \
     --load ${model} \
     --output ${output} \
-    --verbose 100 \
-    --cuda_ids 0,1 \
+    --verbose 100 
 > ${output}.log 
 
 # # cifar small, non-sequentially trained
