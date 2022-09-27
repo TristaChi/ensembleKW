@@ -276,7 +276,7 @@ def robust_loss_parallel(net,
         if isinstance(layer, nn.ReLU):
             # compute bounds
             D = (InputSequential(*dual_net[1:]))
-            Dp = nn.DataParallel(D)
+            Dp = nn.DataParallel(D, device_ids=[0, 1])
             zl, zu = 0, 0
             for j, dual_layer in enumerate(dual_net):
                 D.set_start(j)
