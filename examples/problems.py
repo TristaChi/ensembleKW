@@ -440,7 +440,7 @@ def argparser_evaluate(epsilon=0.1, norm='l1'):
     # parser.add_argument('--seed', type=int, default=seed)
     parser.add_argument('--verbose', type=int, default=True)
     parser.add_argument('--cuda_ids', default=None)
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=2)
 
     
     args = parser.parse_args()
