@@ -237,7 +237,7 @@
 # cifar small, large, sequentially trained
 # model_type=small or model_type=large
 epspx=36
-model_type=small
+model_type=large
 norm=l2
 model="models/seq_trained/l_2/cifar_${model_type}_${epspx}px.pth"
 output="evalData/seq_trained/l_2/cifar_${model_type}_${epspx}px/cifar_${model_type}_${epspx}px_"
@@ -251,7 +251,7 @@ python examples/evaluate.py \
     --load ${model} \
     --output ${output} \
     --verbose 100 \
-    --cuda_ids 2 \
+    --cuda_ids 1 \
 > ${output}.log 
 
 # # cifar small, non-sequentially trained

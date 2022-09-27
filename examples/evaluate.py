@@ -42,7 +42,7 @@ def select_cifar_model(m):
 def robust_verify(models, epsilon, X, **kwargs): 
 
     if X.size(0) == 1: 
-        rl = robust_loss_parallel
+        rl = robust_loss
     else:
         rl = robust_loss
 
