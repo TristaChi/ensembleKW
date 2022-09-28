@@ -250,7 +250,7 @@ python examples/evaluate.py \
     --dataset cifar \
     --load ${model} \
     --output ${output} \
-    --verbose 100 
+    --verbose 1 
 > ${output}.log 
 
 # # cifar small, non-sequentially trained

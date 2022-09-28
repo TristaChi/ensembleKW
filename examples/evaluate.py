@@ -87,6 +87,7 @@ random.seed(0)
 numpy.random.seed(0)
 
 if __name__ == "__main__":
+
     args = pblm.argparser_evaluate(epsilon=0.1, norm='l1')
 
     print("saving file to {}".format(args.output))
@@ -123,16 +124,16 @@ if __name__ == "__main__":
         else:
             train_log = open(args.output + str(j) + "_train", "w")
             test_log = open(args.output + str(j) + "_test", "w")
-
-        # err = evaluate_robustness(train_loader,
-        #                           model,
-        #                           args.epsilon,
-        #                           0,
-        #                           train_log,
-        #                           args.verbose,
-        #                           norm_type=args.norm,
-        #                           bounded_input=False,
-        #                           **kwargs)
+        print("evaluating model", j, train_log)
+        err = evaluate_robustness(train_loader,
+                                  model,
+                                  args.epsilon,
+                                  0,
+                                  train_log,
+                                  args.verbose,
+                                  norm_type=args.norm,
+                                  bounded_input=False,
+                                  **kwargs)
         err = evaluate_robustness(test_loader,
                                   model,
                                   args.epsilon,
