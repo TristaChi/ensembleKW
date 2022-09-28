@@ -130,7 +130,7 @@ def robust_loss(net,
                 y,
                 size_average=True,
                 device_ids=None,
-                parallel=True,
+                parallel=False,
                 return_certificate=False,
                 **kwargs):
     reduction = 'mean' if size_average else 'none'
@@ -250,7 +250,8 @@ def robust_loss_parallel(net,
                          proj=None,
                          norm_type='l1',
                          bounded_input=False,
-                         size_average=True):
+                         size_average=True,
+                         device_ids=None):
     if any('BatchNorm2d' in str(l.__class__.__name__) for l in net):
         raise NotImplementedError
     if bounded_input:
@@ -276,7 +277,7 @@ def robust_loss_parallel(net,
         if isinstance(layer, nn.ReLU):
             # compute bounds
             D = (InputSequential(*dual_net[1:]))
-            Dp = nn.DataParallel(D, device_ids=[0, 1])
+            Dp = nn.DataParallel(D, device_ids=device_ids)
             zl, zu = 0, 0
             for j, dual_layer in enumerate(dual_net):
                 D.set_start(j)

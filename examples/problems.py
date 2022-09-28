@@ -418,7 +418,14 @@ def args2kwargs(args, X=None):
     else:
         kwargs = {
         }
-    kwargs['parallel'] = (args.cuda_ids is not None)
+    if args.cuda_ids is not None:
+        device_ids = []
+        for id_str in args.cuda_ids.split(","):
+            device_ids += int(id_str)
+        if len(device_ids) > 1:
+            kwargs['parallel'] = True
+            kwargs['device_ids'] = device_ids
+
     return kwargs
 
 
@@ -440,7 +447,7 @@ def argparser_evaluate(epsilon=0.1, norm='l1'):
     # parser.add_argument('--seed', type=int, default=seed)
     parser.add_argument('--verbose', type=int, default=True)
     parser.add_argument('--cuda_ids', default=None)
-    parser.add_argument('--batch_size', type=int, default=2)
+    parser.add_argument('--batch_size', type=int, default=1)
 
     
     args = parser.parse_args()

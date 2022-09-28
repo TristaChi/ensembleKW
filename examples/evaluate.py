@@ -20,7 +20,6 @@ from convex_adversarial import robust_loss, robust_loss_parallel
 import math
 import numpy
 
-from time import time
 
 def select_mnist_model(m):
     if m == 'large':
@@ -47,7 +46,7 @@ def robust_verify(models, epsilon, X, **kwargs):
     if X.size(0) == 1:
         rl = robust_loss_parallel
     else:
-        rl = robust_loss_parallel
+        rl = robust_loss
 
     out = model(X)
     _, uncertified = rl(model,
@@ -55,72 +54,27 @@ def robust_verify(models, epsilon, X, **kwargs):
                         X,
                         out.max(1)[1],
                         size_average=False,
-                        proj=50)
+                        **kwargs)
 
-    certified = 0 if uncertified else 1
+    certified = ~uncertified
     return out.max(1)[1], certified
 
 
-def evaluate_robustness(loader,
-                        model,
-                        epsilon,
-                        epoch,
-                        log,
-                        verbose,
-                        training=False,
-                        **kwargs):
+def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
 
-    actual_idx = 0
-
-    n_instances = 50000 if training else 10000
     for i, (X, y) in enumerate(loader):
-
-        start = time()
-
         X, y = X.cuda(), y.cuda().long()
-
         if y.dim() == 2:
             y = y.squeeze(1)
+        y_pred, certified = robust_verify(model, epsilon, Variable(X),
+                                          **kwargs)
 
-        if training:
-            # We evaluate the training set only to compute the optimal weights that maximize the train CRA.
-            # If a prediction is already wrong, it won't contribute anything to maximize the CRA; therefore,
-            # we don't care if the model is able to certify its prediciton. We return 0 for certified in this
-            # to skip the certification process for these points. Do not use this for evaluating the test set.
-            y_pred = model(X).max(1)[1]
+        print(i, y_pred, y, certified, file=log)
 
-            for k in range(len(y)):
-                if y_pred[k] != y[k]:
-                    certified = 0
-                else:
-                    _, certified = robust_verify(model, epsilon,
-                                                 Variable(X[k:k + 1]),
-                                                 **kwargs)
-                print(actual_idx + k, y_pred[k], y[k], certified, file=log)
+        if verbose and i % verbose == 0:
+            print(i, y_pred, y, certified)
 
-            print(f"Working on batch {i}")
-
-        else:
-            if X.size(0) != 1:
-                raise RuntimeError(
-                    "Test evaluation only supports batch size 1")
-
-            y_pred, certified = robust_verify(model, epsilon, Variable(X),
-                                              **kwargs)
-
-            print(i, y_pred, y, certified, file=log)
-
-            if verbose and i % verbose == 0:
-                print(i, y_pred, y, certified)
-
-        # torch.set_grad_enabled(False)
         torch.cuda.empty_cache()
-
-        actual_idx += X.size(0)
-
-        maybe_eta = ((time() - start) / X.shape[0])  * (n_instances - actual_idx) / 3600
-        print(f"Maybe it will take about {maybe_eta:.5f} h to finish")
-
     return True
 
 
@@ -132,7 +86,6 @@ random.seed(0)
 numpy.random.seed(0)
 
 if __name__ == "__main__":
-
     args = pblm.argparser_evaluate(epsilon=0.1, norm='l1')
 
     print("saving file to {}".format(args.output))
@@ -141,11 +94,10 @@ if __name__ == "__main__":
     kwargs = pblm.args2kwargs(args)
 
     if args.dataset == "mnist":
-        train_loader, test_loader = pblm.mnist_loaders(1)
+        train_loader, test_loader = pblm.mnist_loaders(args.batch_size)
         select_model = select_mnist_model
     elif args.dataset == "cifar":
-        _, test_loader = pblm.cifar_loaders(1)
-        train_loader, _ = pblm.cifar_loaders(256)
+        train_loader, test_loader = pblm.cifar_loaders(args.batch_size)
         select_model = select_cifar_model
 
     d = torch.load(args.load)
@@ -163,14 +115,13 @@ if __name__ == "__main__":
         model.eval()
 
     for j, model in enumerate(models):
-        if j <= 4: continue
         if num_models == 1:  #implies that we are evaluating non-sequentially trained models one-by-one
             train_log = open(args.output + "_train", "w")
             test_log = open(args.output + "_test", "w")
         else:
             train_log = open(args.output + str(j) + "_train", "w")
             test_log = open(args.output + str(j) + "_test", "w")
-        print("evaluating model", j, train_log)
+
         err = evaluate_robustness(train_loader,
                                   model,
                                   args.epsilon,
@@ -179,7 +130,6 @@ if __name__ == "__main__":
                                   args.verbose,
                                   norm_type=args.norm,
                                   bounded_input=False,
-                                  training=True,
                                   **kwargs)
         err = evaluate_robustness(test_loader,
                                   model,
@@ -189,5 +139,4 @@ if __name__ == "__main__":
                                   args.verbose,
                                   norm_type=args.norm,
                                   bounded_input=False,
-                                  training=False,
                                   **kwargs)
