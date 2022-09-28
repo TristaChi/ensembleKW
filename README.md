@@ -1,6 +1,6 @@
 # On the Perils of Cascading Robust Classifiers
 The repository supports the paper "On the Perils of Cascading Robust Classifiers."
-This repository evaluates ensembles using different strategie (Cascading, Weighted Voting, Uniform Voting) with Kolter-Wong constituent models.
+This repository evaluates ensembles using different strategies (Cascading, Weighted Voting, Uniform Voting) with Kolter-Wong constituent models and attacks Cascading ensembles.
 See more about the Kolter-Wong models here: https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e
 
 ## What is this repository used for?
@@ -46,12 +46,15 @@ The pre-generated evaluation results are saved in the `evalData` folder.
 The available strategies include Cascading (unsound), Uniform Voting (sound), and Weighted Voting (sound). 
 The algorithm for learning the weights of the weighted voting ensemble is implemented in `example/voting.py`.
 
+#### Attacking ensembles
+`examples/run_attacks_linf.sh` and `examples/run_attacks_l2.sh` include all the hyper-parameters and instructions needed for attacking the pre-trained cascading ensembles. Internally, these scripts use `examples/attack_ensemble.py`.
+
 #### Other files
 All the other files used for training and evaluating the models come from the GitHub page of "Provably robust neural networks" by Wong et al. at https://github.com/locuslab/convex_adversarial/tree/2cd8149249b9e90383af10fc7e9b9fe90166813e.
 
 
 ## How to reproduce the tables in the paper?
-To reproduce the results in the paper, start with the models in the `models` directory or train new constituent models using `train.sh`. Then, use `eval.sh` to generate the results of evaluating each  constituent model in the ensemble. The generated evaluation data is already available in the directory `evalData`. Finally, use `vote.sh` to generate ensemble results for different  model types and ensembling strategies. 
+To reproduce the results in the paper, start with the models in the `models` directory or non-sequentially train constituent models using `train.sh`. Then, use `eval.sh` to generate the results of evaluating each constituent model in the ensemble. The generated evaluation data is already available in the directory `evalData`. Then, use `examples/run_attacks_linf.sh` and `examples/run_attacks_l2.sh` to generate the attack results presented in Table 1. Use `vote.sh` to generate the results for the single best constituent model in Table 1. `vote.sh` also generates results for ensembling strategies that are presented in Tables 4-11.
 
 ## Pre-requisites
 
