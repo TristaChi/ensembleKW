@@ -60,16 +60,30 @@ def robust_verify(models, epsilon, X, **kwargs):
     return out.max(1)[1], certified
 
 
-def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, **kwargs):
+def evaluate_robustness(loader, model, epsilon, epoch, log, verbose, training=False, **kwargs):
 
     for i, (X, y) in enumerate(loader):
         X, y = X.cuda(), y.cuda().long()
+        inlog = False
         if y.dim() == 2:
             y = y.squeeze(1)
-        y_pred, certified = robust_verify(model, epsilon, Variable(X),
-                                          **kwargs)
 
-        print(i, y_pred, y, certified, file=log)
+        if training:
+            # We evaluate the training set only to compute the optimal weights that maximize the train CRA.
+            # If a prediction is already wrong, it won't contribute anything to maximize the CRA; therefore, 
+            # we don't care if the model is able to certify its prediciton. We return 0 for certified in this 
+            # to skip the certification process for these points. Do not use this for evaluating the test set.
+            y_pred = model(X).max(1)[1]
+            if y_pred != y:
+                certified = 0
+                print(i, y_pred, y, certified, file=log)
+                inlog = True
+
+        if not inlog:
+            y_pred, certified = robust_verify(model, epsilon, Variable(X),
+                                            **kwargs)
+
+            print(i, y_pred, y, certified, file=log)
 
         if verbose and i % verbose == 0:
             print(i, y_pred, y, certified)
@@ -133,6 +147,7 @@ if __name__ == "__main__":
                                   args.verbose,
                                   norm_type=args.norm,
                                   bounded_input=False,
+                                  training=True,
                                   **kwargs)
         err = evaluate_robustness(test_loader,
                                   model,
@@ -142,4 +157,5 @@ if __name__ == "__main__":
                                   args.verbose,
                                   norm_type=args.norm,
                                   bounded_input=False,
+                                  training=False,
                                   **kwargs)
