@@ -421,7 +421,8 @@ def args2kwargs(args, X=None):
     if args.cuda_ids is not None:
         device_ids = []
         for id_str in args.cuda_ids.split(","):
-            device_ids += int(id_str)
+            print('id_str: ',id_str,int(id_str))
+            device_ids.append(int(id_str))
         if len(device_ids) > 1:
             kwargs['parallel'] = True
             kwargs['device_ids'] = device_ids
